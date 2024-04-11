@@ -32,8 +32,8 @@ public:
 		std::cout << "Loading fragment shader file: " << fragmentPath << std::endl;
 
 		/*Check ifstream objects can throw exceptions*/
-		//vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-		//fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+		vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+		fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
 		try {
 			/* open files */
