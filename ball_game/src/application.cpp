@@ -1,9 +1,12 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
+#include "shader.h"
+
 #include <iostream>
 
-
-/* Source code for vertex shader in C string */
+/*
+// Source code for vertex shader in C string
 const char* vertexShaderSource = "#version 330 core\n"
 "layout (location = 0) in vec3 aPos;\n"
 "void main()\n"
@@ -16,7 +19,10 @@ const char* fragmentShaderSource = "#version 330 core\n"
 "void main() {\n"
 "FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
 "}\n\0";
+*/
 
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -29,7 +35,7 @@ void processInput(GLFWwindow* window) {
 
 int main(void)
 {
-    /* Initialize and configure library */
+    // Initialize and configure library
     if (!glfwInit()) {
         std::cout << "Failed to initialize GLFW" << std::endl;
         return -1;
@@ -38,9 +44,9 @@ int main(void)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    /* Create a windowed mode window and its OpenGL context */
+    // Create a windowed mode window and its OpenGL context
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "OpenGL", NULL, NULL);
+    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "OpenGL", NULL, NULL);
     if (!window) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -49,18 +55,19 @@ int main(void)
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    /* Initialize GLAD and load all OpenGL function pointers */
+    // Initialize GLAD and load all OpenGL function pointers
+    // Note: GLAD points to where all the OpenGL functions are on the computer, not strictly necessary
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
-
-    /* Build and compile VERTEX shader */
+    /*
+    // Build and compile VERTEX shader
     unsigned int vertexShader;
     vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
     glCompileShader(vertexShader);
-    /* Check for shader compile errors */
+    // Check for shader compile errors 
     int success;
     char infoLog[512];
     glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
@@ -69,39 +76,43 @@ int main(void)
         std::cout << "ERROR SHADER VERTEXT COMPILATION FAILED\n" << infoLog << std::endl;
     }
 
-    /* Build and compile FRAGMENT shader */
+    // Build and compile FRAGMENT shader
     unsigned int fragmentShader;
     fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
     glCompileShader(fragmentShader);
-    /* Check for shader compile errors */
+    // Check for shader compile errors
     glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
     if (!success) {
         glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
         std::cout << "ERROR SHADER FRAGMENT COMPILATION FAILED\n" << infoLog << std::endl;
     }
 
-    /* Build the shader program and link the previous shaders */
+    // Build the shader program and link the previous shaders
     unsigned int shaderProgram;
     shaderProgram = glCreateProgram();
     glAttachShader(shaderProgram, vertexShader);
     glAttachShader(shaderProgram, fragmentShader);
     glLinkProgram(shaderProgram);
-    /* Check if linking failed */
+    // Check if linking failed
     glGetShaderiv(shaderProgram, GL_COMPILE_STATUS, &success);
     if (!success) {
         glGetShaderInfoLog(shaderProgram, 512, NULL, infoLog);
         std::cout << "ERROR SHADER PROGRAM LINKING FAILED\n" << infoLog << std::endl;
     }
 
-    /* Sets the shader program to be used whenever things are drawn to the screen*/
+    // Sets the shader program to be used whenever things are drawn to the screen
     glUseProgram(shaderProgram);
-    /* Deletes the other shaders since they're not going to be used anymore */
+    // Deletes the other shaders since they're not going to be used anymore 
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    */
+
+    // Build and compile shader from shader.h
+    Shader myShader("vertexshader.vs", "fragmentshader.fs");
 
     float vertices[] = {
      0.5f,  0.5f, 0.0f,  // top right
@@ -160,6 +171,8 @@ int main(void)
 
         /* Render here */
         glClear(GL_COLOR_BUFFER_BIT);
+
+        myShader.use();
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
