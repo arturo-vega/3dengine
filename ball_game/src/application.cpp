@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 
+
 /* Source code for vertex shader in C string */
 const char* vertexShaderSource = "#version 330 core\n"
 "layout (location = 0) in vec3 aPos;\n"
@@ -53,7 +54,7 @@ int main(void)
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
-    
+
     /* Build and compile VERTEX shader */
     unsigned int vertexShader;
     vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -108,11 +109,26 @@ int main(void)
     -0.5f, -0.5f, 0.0f,  // bottom left
     -0.5f,  0.5f, 0.0f   // top left 
     };
-    unsigned int indices[] = { 
+    unsigned int indices[] = {
         0, 1, 3,   // first triangle
         1, 2, 3    // second triangle
     };
 
+    /*
+    Personal notes
+    VBO = Vertex Buffer Object, sends vertices all at once to the GPU
+    VAO = Vertex Array Object, creates and stores all attribute calls into the VAO
+    so that you can switch between different VAO's without having to set the VBO each
+    time.
+    EBO = Element Buffer Object, buffer that stores indices that OpenGL can use to decide
+    which verticies to draw
+
+    VBO's and VAO's are necessary but EBO's are not but can eliminate unecessary vertexes
+
+    Can generate multiple buffers at at ime
+    */
+
+    /*Configures some buffer objects*/
     unsigned int VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -129,8 +145,13 @@ int main(void)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
+    /*Sets the color of the background*/
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+
     /* Viewport and automatic resizing when window size is changed */
     glViewport(0, 0, 800, 600);
+
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
@@ -138,7 +159,6 @@ int main(void)
         processInput(window);
 
         /* Render here */
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);

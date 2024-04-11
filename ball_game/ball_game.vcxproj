@@ -24,6 +24,7 @@
     <ProjectGuid>{281ed862-231a-49cd-9e81-5171f8a25c5f}</ProjectGuid>
     <RootNamespace>ballgame</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>3drenderer</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
