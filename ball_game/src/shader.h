@@ -28,16 +28,18 @@ public:
 		std::ifstream vShaderFile;
 		std::ifstream fShaderFile;
 
-		//std::cout << vertextPath << std::endl;
-		//std::cout << fragmentPath << std::endl;
+		std::cout << "Loading vertex shader file: " << vertexPath << std::endl;
+		std::cout << "Loading fragment shader file: " << fragmentPath << std::endl;
 
 		/*Check ifstream objects can throw exceptions*/
-		vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-		fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+		//vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+		//fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
 		try {
 			/* open files */
 			vShaderFile.open(vertexPath);
 			fShaderFile.open(fragmentPath);
+
 			std::stringstream vShaderStream, fShaderStream;
 			/* read file's buffer contents into streams */
 			vShaderStream << vShaderFile.rdbuf();
