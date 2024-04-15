@@ -1,5 +1,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm/glm.hpp>
+#include <glm/glm/gtx/transform.hpp>
+#include <glm/glm/gtc/matrix_transform.hpp>
+#include <glm/glm/gtc/type_ptr.hpp>
 
 #include "shader.h"
 
@@ -45,17 +49,22 @@ int main(void)
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
-    
+
     // Build and compile shader from shader.h
     Shader myShader("../ball_game/src/vertexshader.vs", "../ball_game/src/fragmentshader.fs");
 
     float vertices[] = {
-        // positions         // colors
-         0.5f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f,  // bottom right
-        -0.5f, -0.5f, 0.0f,  0.0f, 1.0f, 0.0f,  // bottom left
-         0.0f,  0.5f, 0.0f,  0.0f, 0.0f, 1.0f   // top 
+        // positions          // colors
+         0.25f,  0.25f, 0.0f, 1.0f, 0.0f, 0.0f, // top right
+         0.25f, -0.25f, 0.0f, 0.0f, 1.0f, 0.0f, // bottom right
+        -0.25f, -0.25f, 0.0f, 0.0f, 0.0f, 1.0f // bottom left
+        -0.25f,  0.25f, 0.0f, 1.0f, 1.0f, 0.0f // top left
     };
 
+    unsigned int indices[] = {
+        0, 1, 3, // first triangle
+        1, 2, 3 // second triangle
+    };
 
     /*
     Personal notes
@@ -72,26 +81,35 @@ int main(void)
     */
 
     /*Configures some buffer objects*/
-    
-    unsigned int VAO, VBO;
+
+    unsigned int VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
 
+    // First triangle -----------------------------------------------------
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
     // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
 
     // color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+
+
 
     /*Sets the color of the background*/
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+
+    myShader.use();
 
     /* Viewport and automatic resizing when window size is changed */
     //glViewport(0, 0, 800, 600);
@@ -103,18 +121,46 @@ int main(void)
     {
         processInput(window);
 
-        /* Render here */
+        // Render here
         glClear(GL_COLOR_BUFFER_BIT);
 
-        myShader.use();
+        glm::mat4 transform = glm::mat4(1.0f); // identity matrix
+
+        // first contianer
+        transform = glm::translate(transform, glm::vec3(0.0f, -0.5f, 0.0f));
+        transform = glm::rotate(transform, (float)glfwGetTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+
+        // get matrix's uniform location and set matrix with value_ptr
+        unsigned int transformLoc = glGetUniformLocation(myShader.ID, "transform");
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
+
+        // draw first container
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        // second container
+        transform = glm::mat4(1.0f); // reset identify matrix to 1.0f
+        transform = glm::translate(transform, glm::vec3(0.0f, 0.5f, 0.0f));
+
+        float scaleAmount = static_cast<float>(sin(glfwGetTime()));
+        transform = glm::scale(transform, glm::vec3(scaleAmount, scaleAmount, scaleAmount));
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, &transform[0][0]);
+
+        transform = glm::rotate(transform, (float)glfwGetTime() * 4, glm::vec3(0.0f, 0.0f, -1.0f));
+        transformLoc = glGetUniformLocation(myShader.ID, "transform");
+        glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
+
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
 
         /* Swap front and back buffers & check and call events */
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
+    glDeleteBuffers(1, &EBO);
 
     glfwTerminate();
     return 0;
