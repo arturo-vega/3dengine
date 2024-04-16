@@ -178,15 +178,36 @@ int main(void)
 
         // Set up the model, view, projection and send them to vertex shader
         // sent to shader in three different ways
+
+        // draw first box
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::translate(model,  glm::vec3(4*cos((float)glfwGetTime() * 2.0f), 0.0f, 4*sin((float)glfwGetTime() * 2.0f)));
         myShader.setMat4("model", model);
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
+        // draw second box
+        model = glm::mat4(1.0f);
+        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.0f, 1.0f, -1.0f));
+        myShader.setMat4("model", model);
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // draw third box
+        model = glm::mat4(1.0f);
+        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(1.0f, 0.0f, 1.0f));
+        model = glm::translate(model, glm::vec3(0.0f, 5 * cos((float)glfwGetTime() * 1.0f), 5 * sin((float)glfwGetTime() * 1.0f)));
+        myShader.setMat4("model", model);
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // view matrice
         glm::mat4 view = glm::mat4(1.0f);
         view = glm::translate(view, glm::vec3(0.0f, 0.0f, -10.0f));
         myShader.setMat4("view", view);
 
+        // perspective matrix
         glm::mat4 projection = glm::mat4(1.0f); 
         projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         myShader.setMat4("projection", projection);
