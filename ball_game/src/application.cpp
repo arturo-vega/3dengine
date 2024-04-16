@@ -15,12 +15,74 @@
 
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
+const float CAM_SPEED = 5.0f;
+const float MOUSE_SENSITIVITY = 0.1f;
+const float FOV = 45.0f; // radians
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+float lastX = SCR_WIDTH / 2, lastY = SCR_HEIGHT / 2;
+float yaw = -270.0f, pitch = 0.0f;
+bool firstMouse = true;
+glm::vec3 cameraPosition = glm::vec3(0.0f, 0.0f, -10.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+void updateLastFrame(void) {
+    float currentFrame = glfwGetTime();
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+}
+
+void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+    float xOffset = xpos - lastX;
+    float yOffset = ypos - lastY;
+    lastX = xpos;
+    lastY = ypos;
+
+    xOffset *= MOUSE_SENSITIVITY;
+    yOffset *= MOUSE_SENSITIVITY;
+
+    yaw += xOffset;
+    pitch -= yOffset;
+
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 direction;
+    direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    direction.y = sin(glm::radians(pitch));
+    direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(direction);
+}
+
 void processInput(GLFWwindow* window) {
+
+    float cameraSpeed = CAM_SPEED * deltaTime;
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraPosition += cameraSpeed * cameraFront;
+
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraPosition -= cameraSpeed * cameraFront;
+
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraPosition -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraPosition += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 }
@@ -166,15 +228,27 @@ int main(void)
 
     glEnable(GL_DEPTH_TEST);
 
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
     {
         processInput(window);
+        glfwSetCursorPosCallback(window, mouse_callback);
+
+        myShader.use();
 
         // Render here
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        myShader.use();
+        glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
+        glm::vec3 cameraDirection = glm::normalize(cameraPosition - cameraTarget); // Positive Z
+
+        // view matrix
+        glm::mat4 view;
+        view = glm::lookAt(cameraPosition, cameraPosition + cameraFront, cameraUp);
+
+        myShader.setMat4("view", view);
 
         // Set up the model, view, projection and send them to vertex shader
         // sent to shader in three different ways
@@ -189,7 +263,7 @@ int main(void)
 
         // draw second box
         model = glm::mat4(1.0f);
-        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.0f, 1.0f, -1.0f));
+        //model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.0f, 1.0f, -1.0f));
         myShader.setMat4("model", model);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -202,14 +276,9 @@ int main(void)
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        // view matrice
-        glm::mat4 view = glm::mat4(1.0f);
-        view = glm::translate(view, glm::vec3(0.0f, 0.0f, -10.0f));
-        myShader.setMat4("view", view);
-
         // perspective matrix
         glm::mat4 projection = glm::mat4(1.0f); 
-        projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        projection = glm::perspective(glm::radians(FOV), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         myShader.setMat4("projection", projection);
 
         // draw first container
@@ -217,6 +286,7 @@ int main(void)
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // Swap front and back buffers & check and call events
+        updateLastFrame();
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
