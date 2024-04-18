@@ -9,19 +9,25 @@
 #include "camera.h"
 
 #include <iostream>
+#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-
+const float PLANE_SIZE = 10.0f;
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
+const unsigned int MAP_WIDTH = 100;
+const unsigned int MAP_HEIGHT = 100;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
 bool firstMouse = true;
 Camera camera (glm::vec3(0.0f, 0.0f, 3.0f));
+
+
+
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void updateLastFrame(void);
@@ -62,7 +68,7 @@ int main(void)
     // Build and compile shader from shader.h
     Shader myShader("../ball_game/src/vertexshader.vs", "../ball_game/src/fragmentshader.fs");
 
-    float vertices[] = {
+    GLfloat vertices[] = {
     -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
      0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
      0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
@@ -106,6 +112,41 @@ int main(void)
     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
     };
 
+    int mapWidth = 600;
+    int mapLength = 600;
+    int mapHeight = -5;
+
+    std::vector<float> planeVertices;
+
+    for (int x = 0; x < mapWidth - 1; x++) {
+        for (int z = 0; z < mapLength - 1; z++) {
+            planeVertices.push_back(x);
+            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(z);
+
+            planeVertices.push_back(x);
+            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(z + 1);
+
+            planeVertices.push_back(x + 1);
+            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(z + 1);
+
+
+            planeVertices.push_back(x);
+            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(z);
+
+            planeVertices.push_back(x + 1);
+            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(z);
+
+            planeVertices.push_back(x + 1);
+            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(z + 1);
+        }
+    }
+
     /*
     Personal notes
     VBO = Vertex Buffer Object, sends vertices all at once to the GPU
@@ -122,14 +163,12 @@ int main(void)
 
     /*Configures some buffer objects*/
 
-    unsigned int VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+    unsigned int VAOs[2], VBOs[2];
+    glGenVertexArrays(2, VAOs);
+    glGenBuffers(2, VBOs);
 
-    // First triangle -----------------------------------------------------
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBindVertexArray(VAOs[0]);
+    glBindBuffer(GL_ARRAY_BUFFER, VBOs[0]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // position attribute
@@ -139,6 +178,17 @@ int main(void)
     // texture attribute
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+
+    // plane mesh
+    glBindVertexArray(VAOs[1]);
+    glBindBuffer(GL_ARRAY_BUFFER, VBOs[1]);
+    glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(float), planeVertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
+    glEnableVertexAttribArray(0);
+
+    
+
 
 
     // can use glgentextures to generate more than one texture at a time 
@@ -174,6 +224,7 @@ int main(void)
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 
+
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
     {
@@ -198,13 +249,13 @@ int main(void)
         model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::translate(model,  glm::vec3(4*cos((float)glfwGetTime() * 2.0f), 0.0f, 4*sin((float)glfwGetTime() * 2.0f)));
         myShader.setMat4("model", model);
-        glBindVertexArray(VAO);
+        glBindVertexArray(VAOs[0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // draw second box
         model = glm::mat4(1.0f);
         myShader.setMat4("model", model);
-        glBindVertexArray(VAO);
+        glBindVertexArray(VAOs[0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // draw third box
@@ -212,16 +263,24 @@ int main(void)
         model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(1.0f, 0.0f, 1.0f));
         model = glm::translate(model, glm::vec3(0.0f, 5 * cos((float)glfwGetTime() * 1.0f), 5 * sin((float)glfwGetTime() * 1.0f)));
         myShader.setMat4("model", model);
-        glBindVertexArray(VAO);
+        glBindVertexArray(VAOs[0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        //draw mesh
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3((mapWidth / 2) * -1, 0.0f, (mapLength / 2) * -1));
+        myShader.setMat4("model", model);
+        glBindVertexArray(VAOs[1]);
+        glDrawArrays(GL_TRIANGLES, 0, (mapWidth - 1) * (mapLength - 1) * 6);
+
 
         // Swap front and back buffers & check and call events
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
+    glDeleteVertexArrays(2, VAOs);
+    glDeleteBuffers(2, VBOs);
 
     glfwTerminate();
     return 0;
@@ -268,6 +327,17 @@ void processInput(GLFWwindow* window) {
 
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+        GLint polygonMode;
+        glGetIntegerv(GL_POLYGON_MODE, &polygonMode);
+        if (polygonMode == GL_LINE) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
+        else {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        }
+    }
 }
 
 void updateLastFrame(void) {
