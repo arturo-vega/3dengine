@@ -4,6 +4,7 @@
 #include <glm/glm/gtx/transform.hpp>
 #include <glm/glm/gtc/matrix_transform.hpp>
 #include <glm/glm/gtc/type_ptr.hpp>
+#include <glm/glm/gtc/noise.hpp>
 
 #include "shader.h"
 #include "camera.h"
@@ -33,6 +34,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
+float heightInterpolation(int x, int z, int mapWidth, int mapLength);
 
 int main(void)
 {
@@ -112,37 +114,39 @@ int main(void)
     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
     };
 
-    int mapWidth = 600;
-    int mapLength = 600;
-    int mapHeight = -5;
+
+    int mapWidth = 100;
+    int mapLength = 100;
+    float baseHeight = 25.0f;
+
 
     std::vector<float> planeVertices;
 
     for (int x = 0; x < mapWidth - 1; x++) {
         for (int z = 0; z < mapLength - 1; z++) {
+
             planeVertices.push_back(x);
-            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(heightInterpolation(x, z, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z);
 
             planeVertices.push_back(x);
-            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(heightInterpolation(x, z + 1, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z + 1);
 
             planeVertices.push_back(x + 1);
-            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(heightInterpolation(x + 1, z + 1, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z + 1);
 
-
             planeVertices.push_back(x);
-            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(heightInterpolation(x, z, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z);
 
             planeVertices.push_back(x + 1);
-            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(heightInterpolation(x + 1, z, mapWidth, mapLength)* baseHeight);
             planeVertices.push_back(z);
 
             planeVertices.push_back(x + 1);
-            planeVertices.push_back(mapHeight);
+            planeVertices.push_back(heightInterpolation(x + 1, z + 1, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z + 1);
         }
     }
@@ -268,7 +272,7 @@ int main(void)
 
         //draw mesh
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3((mapWidth / 2) * -1, 0.0f, (mapLength / 2) * -1));
+        model = glm::translate(model, glm::vec3((mapWidth / 2) * -1, -10.0f, (mapLength / 2) * -1));
         myShader.setMat4("model", model);
         glBindVertexArray(VAOs[1]);
         glDrawArrays(GL_TRIANGLES, 0, (mapWidth - 1) * (mapLength - 1) * 6);
@@ -348,4 +352,22 @@ void updateLastFrame(void) {
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
+}
+
+float heightInterpolation(int x, int z, int mapWidth, int mapLength) {
+    float nx = (float)x / (mapWidth - 1);
+    float nz = (float)z / (mapLength - 1);
+
+    float noiseA = glm::simplex(glm::vec2(nx, nz));
+    float noiseB = glm::simplex(glm::vec2(nx + 1.0f, nz));
+    float noiseC = glm::simplex(glm::vec2(nx, nz + 1.0f));
+    float noiseD = glm::simplex(glm::vec2(nx + 1.0f, nz + 1.0f));
+
+    float weightX = 1.0f - nx;
+    float weightZ = 1.0f - nz;
+
+    float interpolatedNoise = noiseA * weightX * weightZ + noiseB * (1.0f - weightX) * weightZ +
+        noiseC * weightX * (1.0f - weightZ) + noiseD * (1.0f - weightX) * (1.0f - weightZ);
+
+    return interpolatedNoise;
 }
