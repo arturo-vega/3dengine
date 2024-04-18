@@ -128,26 +128,38 @@ int main(void)
             planeVertices.push_back(x);
             planeVertices.push_back(heightInterpolation(x, z, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z);
+            planeVertices.push_back(0.0f);
+            planeVertices.push_back(0.0f);
 
             planeVertices.push_back(x);
             planeVertices.push_back(heightInterpolation(x, z + 1, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z + 1);
+            planeVertices.push_back(1.0f);
+            planeVertices.push_back(0.0f);
 
             planeVertices.push_back(x + 1);
             planeVertices.push_back(heightInterpolation(x + 1, z + 1, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z + 1);
+            planeVertices.push_back(1.0f);
+            planeVertices.push_back(1.0f);
 
             planeVertices.push_back(x);
             planeVertices.push_back(heightInterpolation(x, z, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z);
+            planeVertices.push_back(1.0f);
+            planeVertices.push_back(1.0f);
 
             planeVertices.push_back(x + 1);
             planeVertices.push_back(heightInterpolation(x + 1, z, mapWidth, mapLength)* baseHeight);
             planeVertices.push_back(z);
+            planeVertices.push_back(0.0f);
+            planeVertices.push_back(1.0f);
 
             planeVertices.push_back(x + 1);
             planeVertices.push_back(heightInterpolation(x + 1, z + 1, mapWidth, mapLength) * baseHeight);
             planeVertices.push_back(z + 1);
+            planeVertices.push_back(0.0f);
+            planeVertices.push_back(0.0f);
         }
     }
 
@@ -171,6 +183,7 @@ int main(void)
     glGenVertexArrays(2, VAOs);
     glGenBuffers(2, VBOs);
 
+    // cube stuff
     glBindVertexArray(VAOs[0]);
     glBindBuffer(GL_ARRAY_BUFFER, VBOs[0]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -188,17 +201,22 @@ int main(void)
     glBindBuffer(GL_ARRAY_BUFFER, VBOs[1]);
     glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(float), planeVertices.data(), GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
     glEnableVertexAttribArray(0);
+
+    // texture attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
     
 
 
 
     // can use glgentextures to generate more than one texture at a time 
-    unsigned int texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    unsigned int brick, grass;
+    glGenTextures(1, &brick);
+    glBindTexture(GL_TEXTURE_2D, brick);
 
     // texture wrapping/filtering options for current texture(s)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -206,7 +224,7 @@ int main(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    // load texture
+    // load brick texture
     int width, height, nrChannels;
     unsigned char* data = stbi_load("../ball_game/src/wall.jpg", &width, &height, &nrChannels, 0);
     
@@ -215,7 +233,29 @@ int main(void)
         glGenerateMipmap(GL_TEXTURE_2D);
     }
     else {
-        std::cout << "Failed to load texture: " << std::endl;
+        std::cout << "Failed to load texture: brick " << std::endl;
+    }
+    // Done loading texture so free data
+    stbi_image_free(data);
+
+
+    // ---- load grass texture
+    glGenTextures(1, &grass);
+    glBindTexture(GL_TEXTURE_2D, grass);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    data = stbi_load("../ball_game/src/grass.jpg", &width, &height, &nrChannels, 0);
+
+    if (data) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else {
+        std::cout << "Failed to load texture: grass " << std::endl;
     }
     // Done loading texture so free data
     stbi_image_free(data);
@@ -239,6 +279,10 @@ int main(void)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         myShader.use();
+
+        //bind brick texture for boxes
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, brick);
 
         // projection matrix
         glm::mat4 projection = glm::perspective(glm::radians(camera.Fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
@@ -270,6 +314,9 @@ int main(void)
         glBindVertexArray(VAOs[0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
+        // bind grass for plane
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, grass);
         //draw mesh
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3((mapWidth / 2) * -1, -10.0f, (mapLength / 2) * -1));
