@@ -1,3 +1,4 @@
+#pragma once
 #ifndef CAMERA_H
 #define CAMERA_H
 
@@ -7,7 +8,7 @@
 
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 2.5f;
+const float SPEED = 35.5f;
 const float SENSITVITY = 0.1f;
 const float FOV = 45.0f;
 
@@ -17,7 +18,8 @@ enum Camera_Movement {
 	LEFT,
 	RIGHT,
 	UP,
-	DOWN
+	DOWN,
+	FAST
 };
 
 class Camera {
@@ -55,8 +57,6 @@ public:
 	void ProcessKeyboard(Camera_Movement direction, float deltaTime)
 	{
 		float velocity = MovementSpeed * deltaTime;
-		if (direction == FORWARD)
-			Position += Front * velocity;
 
 		if (direction == FORWARD)
 			Position += Front * velocity;

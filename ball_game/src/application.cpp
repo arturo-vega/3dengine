@@ -6,46 +6,56 @@
 #include <glm/glm/gtc/type_ptr.hpp>
 #include <glm/glm/gtc/noise.hpp>
 
+#include <cstdint>
+
 #include "shader.h"
 #include "camera.h"
+#include "SimplexNoise.h"
 
 #include <iostream>
 #include <vector>
+#include <random>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 const float PLANE_SIZE = 10.0f;
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
-const unsigned int MAP_WIDTH = 100;
-const unsigned int MAP_HEIGHT = 100;
+const unsigned int SCR_WIDTH = 1600;
+const unsigned int SCR_HEIGHT = 1200;
+const float MAP_WIDTH = 1000.0f;
+const float MAP_LENGTH = 1000.0f;
+const float MAP_HEIGHT = 100.0f;
+const float VIEW_DISTANCE = 1000.0f;
+const float MAP_RESOLUTION = 1.0f;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
 bool firstMouse = true;
 Camera camera (glm::vec3(0.0f, 0.0f, 3.0f));
-glm::vec3 lightPosition(0.0f, 0.0f, 0.0f);
+glm::vec3 lightPosition(0.0f, 100.0f, 0.0f);
 
 
-glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
-    glm::vec3 edge1 = v2 - v1;
-    glm::vec3 edge2 = v3 - v1;
-
-    glm::vec3 normal = glm::cross(edge1, edge2);
-
-    return glm::normalize(normal);
-}
-
+glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
-float heightInterpolation(int x, int z, int mapWidth, int mapLength);
 
 int main(void)
 {
+    // simplex noise values
+    // Lacunarity specifies the frequency multiplier between successive octaves (default to 2.0).
+    // Persistence is the loss of amplitude between successive octaves (usually 1/lacunarity)
+    const float amplitutde = 0.5f;
+    const float scale = 50.0f;
+    const float lacunarity = 1.99f;
+    const float persistance = 0.5f;
+    const int octaves = 5;
+
+    const SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
+    //const int octaves = static_cast<int>(5 + std::log(scale));
+    
     // Initialize and configure library
     //glfwInit();
     if (!glfwInit()) {
@@ -172,19 +182,14 @@ int main(void)
     };
 
 
-
-    float mapWidth = 100;
-    float mapLength = 100;
-    float baseHeight = 35.0f;
-
-
     std::vector<float> planeVertices;
 
-    for (float x = 0; x < mapWidth - 1; x++) {
-        for (float z = 0; z < mapLength - 1; z++) {
+
+    for (float x = 0; x <= MAP_WIDTH - MAP_RESOLUTION; x += MAP_RESOLUTION) {
+        for (float z = 0; z <= MAP_LENGTH - MAP_RESOLUTION; z += MAP_RESOLUTION) {
 
             // will end up with each vertice having 8 floats
-            // 3 position floats, 2 texture floats, 3 normal floats
+            // 3 position floats, 3 normal floats, 2 texture floats
 
             float x1, x2, x3, y1, y2, y3, z1, z2, z3;
             glm::vec3 a, b, c;
@@ -193,17 +198,17 @@ int main(void)
             // getting vertices from triangle one
             x1 = x;
             z1 = z;
-            y1 = heightInterpolation(x, z, mapWidth, mapLength) * baseHeight;
+            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
             a = glm::vec3(x1, y1, z1);
 
             x2 = x;
-            z2 = z + 1;
-            y2 = heightInterpolation(x2, z2, mapWidth, mapLength) * baseHeight;
+            z2 = z + MAP_RESOLUTION;
+            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
             b = glm::vec3(x2, y2, z2);
 
-            x3 = x + 1;
-            z3 = z + 1;
-            y3 = heightInterpolation(x3, z3, mapWidth, mapLength) * baseHeight;
+            x3 = x + MAP_RESOLUTION;
+            z3 = z + MAP_RESOLUTION;
+            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
             c = glm::vec3(x3, y3, z3);
             normal = calculateTriangleNormal(a, b, c);
 
@@ -238,17 +243,17 @@ int main(void)
             // getting vertices from triangle 2
             x1 = x;
             z1 = z;
-            y1 = heightInterpolation(x1, z1, mapWidth, mapLength) * baseHeight;
+            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
             a = glm::vec3(x1, y1, z1);
 
-            x2 = x + 1;
+            x2 = x + MAP_RESOLUTION;
             z2 = z;
-            y2 = heightInterpolation(x2, z2, mapWidth, mapLength) * baseHeight;
+            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
             b = glm::vec3(x2, y2, z2);
 
-            x3 = x + 1;
-            z3 = z + 1;
-            y3 = heightInterpolation(x3, z3, mapWidth, mapLength) * baseHeight;
+            x3 = x + MAP_RESOLUTION;
+            z3 = z + MAP_RESOLUTION;
+            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
             c = glm::vec3(x3, y3, z3);
             // set it to negative because the normal vector gets the vector from the opposite side of the traingle
             // fromt the first calculation... need to fix this 
@@ -415,7 +420,7 @@ int main(void)
         lightingShader.setVec3("viewPosition", lightPosition);
 
         // projection/view matrix
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, VIEW_DISTANCE);
         glm::mat4 view = camera.GetViewMatrix();
         lightingShader.setMat4("projection", projection);
         lightingShader.setMat4("view", view);
@@ -446,10 +451,10 @@ int main(void)
         
         //draw mesh
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3((mapWidth / 2) * -1, -10.0f, (mapLength / 2) * -1));
+        model = glm::translate(model, glm::vec3((MAP_WIDTH / 2) * -1, -10.0f, (MAP_LENGTH / 2) * -1));
         lightingShader.setMat4("model", model);
         glBindVertexArray(VAOs[1]);
-        glDrawArrays(GL_TRIANGLES, 0, (mapWidth - 1) * (mapLength - 1) * 6);
+        glDrawArrays(GL_TRIANGLES, 0, (MAP_WIDTH - 1) * (MAP_LENGTH - 1) * 6);
 
         // draw light box
         lightCubeShader.use();
@@ -496,6 +501,8 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
 
 void processInput(GLFWwindow* window) {
 
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == true)
+        camera.ProcessKeyboard(FAST, deltaTime);
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera.ProcessKeyboard(FORWARD, deltaTime);
@@ -540,20 +547,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
-float heightInterpolation(int x, int z, int mapWidth, int mapLength) {
-    float nx = (float)x / (mapWidth - 1);
-    float nz = (float)z / (mapLength - 1);
+glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
+    glm::vec3 edge1 = v2 - v1;
+    glm::vec3 edge2 = v3 - v1;
 
-    float noiseA = glm::simplex(glm::vec2(nx, nz));
-    float noiseB = glm::simplex(glm::vec2(nx + 1.0f, nz));
-    float noiseC = glm::simplex(glm::vec2(nx, nz + 1.0f));
-    float noiseD = glm::simplex(glm::vec2(nx + 1.0f, nz + 1.0f));
+    glm::vec3 normal = glm::cross(edge1, edge2);
 
-    float weightX = 1.0f - nx;
-    float weightZ = 1.0f - nz;
-
-    float interpolatedNoise = noiseA * weightX * weightZ + noiseB * (1.0f - weightX) * weightZ +
-        noiseC * weightX * (1.0f - weightZ) + noiseD * (1.0f - weightX) * (1.0f - weightZ);
-
-    return interpolatedNoise;
+    return glm::normalize(normal);
 }
