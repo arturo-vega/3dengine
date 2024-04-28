@@ -22,11 +22,14 @@
 const float PLANE_SIZE = 10.0f;
 const unsigned int SCR_WIDTH = 1600;
 const unsigned int SCR_HEIGHT = 1200;
-const float MAP_WIDTH = 1000.0f;
-const float MAP_LENGTH = 1000.0f;
-const float MAP_HEIGHT = 100.0f;
+const float MAP_WIDTH = 500.0f;
+const float MAP_LENGTH = 500.0f;
+const float MAP_HEIGHT = 55.0f;
 const float VIEW_DISTANCE = 1000.0f;
 const float MAP_RESOLUTION = 1.0f;
+const unsigned int NUM_STRIPS = (int)MAP_WIDTH * 5;
+const unsigned int NUM_VERTS_PER_STRIP = (int)MAP_LENGTH * 2;
+const unsigned int TEXTURE_SIZE = 4;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float lastX = SCR_WIDTH / 2;
@@ -183,9 +186,10 @@ int main(void)
 
 
     std::vector<float> planeVertices;
+    std::vector<unsigned int> indices;
+    int vertexIndex = 0;
 
-
-    for (float x = 0; x <= MAP_WIDTH - MAP_RESOLUTION; x += MAP_RESOLUTION) {
+    for (float x = 0; x <= MAP_WIDTH; x += MAP_RESOLUTION) {
         for (float z = 0; z <= MAP_LENGTH - MAP_RESOLUTION; z += MAP_RESOLUTION) {
 
             // will end up with each vertice having 8 floats
@@ -194,6 +198,10 @@ int main(void)
             float x1, x2, x3, y1, y2, y3, z1, z2, z3;
             glm::vec3 a, b, c;
             glm::vec3 normal;
+            float texCoordX1 = x / TEXTURE_SIZE;
+            float texCoordZ1 = z / TEXTURE_SIZE;
+            float texCoordX2 = (x + MAP_RESOLUTION) / TEXTURE_SIZE;
+            float texCoordZ2 = (z + MAP_RESOLUTION) / TEXTURE_SIZE;
 
             // getting vertices from triangle one
             x1 = x;
@@ -219,8 +227,8 @@ int main(void)
             planeVertices.push_back(normal.x); // normalized coordinates
             planeVertices.push_back(normal.y);
             planeVertices.push_back(normal.z);
-            planeVertices.push_back(0.0f); // texture coordinates
-            planeVertices.push_back(0.0f);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ1);
 
             planeVertices.push_back(x2);
             planeVertices.push_back(y2);
@@ -228,8 +236,8 @@ int main(void)
             planeVertices.push_back(normal.x); // normalized coordinates
             planeVertices.push_back(normal.y);
             planeVertices.push_back(normal.z);
-            planeVertices.push_back(1.0f); // texture coordinates
-            planeVertices.push_back(0.0f);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
 
             planeVertices.push_back(x3);
             planeVertices.push_back(y3);
@@ -237,8 +245,8 @@ int main(void)
             planeVertices.push_back(normal.x); // normalized coordinates
             planeVertices.push_back(normal.y);
             planeVertices.push_back(normal.z);
-            planeVertices.push_back(1.0f); // texture coordinates
-            planeVertices.push_back(1.0f);
+            planeVertices.push_back(texCoordX2); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
             
             // getting vertices from triangle 2
             x1 = x;
@@ -266,8 +274,8 @@ int main(void)
             planeVertices.push_back(normal.x); // normalized coordinates
             planeVertices.push_back(normal.y);
             planeVertices.push_back(normal.z);
-            planeVertices.push_back(1.0f); // texture coordinates
-            planeVertices.push_back(1.0f);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ1);
 
             planeVertices.push_back(x2);
             planeVertices.push_back(y2);
@@ -275,8 +283,8 @@ int main(void)
             planeVertices.push_back(normal.x); // normalized coordinates
             planeVertices.push_back(normal.y);
             planeVertices.push_back(normal.z);
-            planeVertices.push_back(0.0f); // texture coordinates
-            planeVertices.push_back(1.0f);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
 
             planeVertices.push_back(x3);
             planeVertices.push_back(y3);
@@ -284,17 +292,39 @@ int main(void)
             planeVertices.push_back(normal.x); // normalized coordinates
             planeVertices.push_back(normal.y);
             planeVertices.push_back(normal.z);
-            planeVertices.push_back(0.0f); // texture coordinates
-            planeVertices.push_back(0.0f);
+            planeVertices.push_back(texCoordX2); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
+
+
+            // fill vertices matrix
+            // fill vertices matrix
+            indices.push_back(vertexIndex + 1);
+            indices.push_back(vertexIndex + 5);
+            indices.push_back(vertexIndex + 2);
+
+            // fill vertices matrix
+            indices.push_back(vertexIndex + 2);
+            indices.push_back(vertexIndex + 1);
+            indices.push_back(vertexIndex + 5);
+
+            vertexIndex += 6;
         }
     }
 
+    std::cout << "Map: " << MAP_WIDTH << " x " << MAP_LENGTH << std::endl;
 
+    std::cout << "Created lattice of " << NUM_STRIPS << " strips with " << NUM_VERTS_PER_STRIP << " triangles each" << std::endl;
+    std::cout << "Created " << NUM_STRIPS * NUM_VERTS_PER_STRIP << " triangles total" << std::endl;
 
+    std::cout << "Number of triangles: " << planeVertices.size() / (sizeof(float) * 24) << std::endl;
+
+    std::cout << "Vertex index: " << (vertexIndex * 2) / 3<< std::endl;
     /*Configures some buffer objects*/
 
-    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO;
 
+    // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
+    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO;
+    GLuint terrainEBO;
 
     // cube stuff -----------------------------------------------------------------------
     glGenVertexArrays(2, VAOs);
@@ -328,10 +358,10 @@ int main(void)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // plane mesh stuff ------------------------------------------------------------------
+    // terrain mesh stuff ------------------------------------------------------------------
     glBindVertexArray(VAOs[1]);
     glBindBuffer(GL_ARRAY_BUFFER, VBOs[1]);
-    glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(float), planeVertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(float), &planeVertices[0], GL_STATIC_DRAW);
 
     // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
@@ -344,6 +374,11 @@ int main(void)
     // texture attribute
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
+
+    // ebo buffer that takes in indices
+    glGenBuffers(1, &terrainEBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
     
 
@@ -445,16 +480,20 @@ int main(void)
         glBindVertexArray(VAOs[0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        // bind grass for plane
+        // bind grass for terrain
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, grass);
         
-        //draw mesh
+        // draw terrain
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3((MAP_WIDTH / 2) * -1, -10.0f, (MAP_LENGTH / 2) * -1));
         lightingShader.setMat4("model", model);
         glBindVertexArray(VAOs[1]);
-        glDrawArrays(GL_TRIANGLES, 0, (MAP_WIDTH - 1) * (MAP_LENGTH - 1) * 6);
+        // draw terrain by strips
+        for (unsigned int i = 0; i < NUM_STRIPS - 1; i++) {
+            glDrawElements(GL_TRIANGLE_STRIP, NUM_VERTS_PER_STRIP, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * NUM_VERTS_PER_STRIP * i));
+        }
+        //glDrawArrays(GL_TRIANGLES, 0, (MAP_WIDTH - 1) * (MAP_LENGTH - 1) * 6);
 
         // draw light box
         lightCubeShader.use();
