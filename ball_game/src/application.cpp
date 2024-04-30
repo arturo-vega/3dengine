@@ -34,12 +34,12 @@ float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
+float cubeRadians = 0.0f;
 bool firstMouse = true;
 bool mouseLook = true;
 Camera camera (glm::vec3(0.0f, 0.0f, 3.0f));
-float lightPosition_y = 100.0f, lightPosition_x = 0.0f, lightPosition_z = 0.0f;
-glm::vec3 lightPosition(lightPosition_x, lightPosition_x, lightPosition_z);
-unsigned int buttonDelay = 0;
+float lightPosition_y = 0.0f, lightPosition_x = 0.0f, lightPosition_z = 0.0f;
+glm::vec3 lightPosition(lightPosition_x, lightPosition_y, lightPosition_z);
 
 bool qPressed = false;
 bool tPressed = false;
@@ -49,6 +49,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
+void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int>& indices, int MAP_WIDTH, int MAP_LENGTH, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves);
 
 int main(void)
 {
@@ -57,11 +58,11 @@ int main(void)
     // Persistence is the loss of amplitude between successive octaves (usually 1/lacunarity)
     const float amplitutde = 0.5f;
     const float scale = 50.0f;
-    const float lacunarity = 1.99f;
-    const float persistance = 0.5f;
-    const int octaves = 5;
+    float lacunarity = 1.99f;
+    float persistance = 0.5f;
+    int octaves = 5;
 
-    const SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
+    SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
     //const int octaves = static_cast<int>(5 + std::log(scale));
 
     // Initialize and configure library
@@ -201,130 +202,11 @@ int main(void)
     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f
     };
 
-
     std::vector<float> planeVertices;
     std::vector<unsigned int> indices;
     int vertexIndex = 0;
 
-    for (float x = 0; x <= MAP_WIDTH; x += MAP_RESOLUTION) {
-        for (float z = 0; z <= MAP_LENGTH - MAP_RESOLUTION; z += MAP_RESOLUTION) {
-
-            // will end up with each vertice having 8 floats
-            // 3 position floats, 3 normal floats, 2 texture floats
-
-            float x1, x2, x3, y1, y2, y3, z1, z2, z3;
-            glm::vec3 a, b, c;
-            glm::vec3 normal;
-            float texCoordX1 = x / TEXTURE_SIZE;
-            float texCoordZ1 = z / TEXTURE_SIZE;
-            float texCoordX2 = (x + MAP_RESOLUTION) / TEXTURE_SIZE;
-            float texCoordZ2 = (z + MAP_RESOLUTION) / TEXTURE_SIZE;
-
-            // getting vertices from triangle one
-            x1 = x;
-            z1 = z;
-            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
-            a = glm::vec3(x1, y1, z1);
-
-            x2 = x;
-            z2 = z + MAP_RESOLUTION;
-            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
-            b = glm::vec3(x2, y2, z2);
-
-            x3 = x + MAP_RESOLUTION;
-            z3 = z + MAP_RESOLUTION;
-            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
-            c = glm::vec3(x3, y3, z3);
-            normal = calculateTriangleNormal(a, b, c);
-
-            // pushing vertices from triangle one along with texture coords and normal vector
-            planeVertices.push_back(x1);
-            planeVertices.push_back(y1);
-            planeVertices.push_back(z1);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ1);
-
-            planeVertices.push_back(x2);
-            planeVertices.push_back(y2);
-            planeVertices.push_back(z2);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-
-            planeVertices.push_back(x3);
-            planeVertices.push_back(y3);
-            planeVertices.push_back(z3);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX2); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-            
-            // getting vertices from triangle 2
-            x1 = x;
-            z1 = z;
-            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
-            a = glm::vec3(x1, y1, z1);
-
-            x2 = x + MAP_RESOLUTION;
-            z2 = z;
-            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
-            b = glm::vec3(x2, y2, z2);
-
-            x3 = x + MAP_RESOLUTION;
-            z3 = z + MAP_RESOLUTION;
-            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
-            c = glm::vec3(x3, y3, z3);
-            // set it to negative because the normal vector gets the vector from the opposite side of the traingle
-            // fromt the first calculation... need to fix this 
-            normal = -calculateTriangleNormal(a, b, c);
-
-            // pushing vertices from triangle 2 along with coord and normal info
-            planeVertices.push_back(x1);
-            planeVertices.push_back(y1);
-            planeVertices.push_back(z1);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ1);
-
-            planeVertices.push_back(x2);
-            planeVertices.push_back(y2);
-            planeVertices.push_back(z2);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-
-            planeVertices.push_back(x3);
-            planeVertices.push_back(y3);
-            planeVertices.push_back(z3);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX2); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-
-            // fill vertices matrix
-            indices.push_back(vertexIndex + 1);
-            indices.push_back(vertexIndex + 5);
-            indices.push_back(vertexIndex + 2);
-
-            // fill vertices matrix
-            indices.push_back(vertexIndex + 2);
-            indices.push_back(vertexIndex + 1);
-            indices.push_back(vertexIndex + 5);
-
-            vertexIndex += 6;
-        }
-    }
+    generateTerrainMap(planeVertices, indices, MAP_WIDTH, MAP_LENGTH, MAP_RESOLUTION, lacunarity, persistance, octaves);
 
     std::cout << "Map: " << MAP_WIDTH << " x " << MAP_LENGTH << std::endl;
     std::cout << "Created lattice of " << NUM_STRIPS << " strips with " << NUM_VERTS_PER_STRIP << " triangles each" << std::endl;
@@ -445,9 +327,9 @@ int main(void)
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // just stuff for the imgui thing, move it later
-    bool show_demo_window = true;
-    bool show_another_window = false;
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    bool show_demo_window = false;
+
+    glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
@@ -465,33 +347,33 @@ int main(void)
 
         // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
         {
-            static float f = 0.0f;
-            static int counter = 0;
+            ImGui::Begin("World Settings");                          // Create a window called "Hello, world!" and append into it.
 
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
             ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
 
-            ImGui::SliderFloat("float", &lightPosition_y, -2000.0f, 2000.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+            ImGui::SliderFloat("Light X", &lightPosition_x, -200.0f, 200.0f);
+            ImGui::SliderFloat("Light Y", &lightPosition_y, -100.0f, 200.0f);
+            ImGui::SliderFloat("Light Z", &lightPosition_z, -200.0f, 200.0f);
+            ImGui::SliderFloat("Light Rotation", &cubeRadians, -360.0f, 360.0f);
+            ImGui::ColorEdit3("Light Color", (float*)&lightColor);
 
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
+            //if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+            //    counter++;
+            //ImGui::SameLine();
+            //ImGui::Text("counter = %d", counter);
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
         }
+
+        lightPosition = glm::vec3(lightPosition_x, lightPosition_y, lightPosition_z);
 
         // Render here
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         lightingShader.use();
         lightingShader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
-        lightingShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+        lightingShader.setVec3("lightColor", lightColor);
         lightingShader.setVec3("lightPosition", lightPosition);
         lightingShader.setVec3("viewPosition", lightPosition);
 
@@ -541,7 +423,8 @@ int main(void)
         lightCubeShader.setMat4("projection", projection);
         lightCubeShader.setMat4("view", view);
         model = glm::mat4(1.0f);
-        glm::translate(model, lightPosition);
+        glm::rotate(model, glm::radians(cubeRadians), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::translate(model, lightPosition);
         glm::scale(model, glm::vec3(0.2f));
         lightCubeShader.setMat4("model", model);
         glBindVertexArray(lightVAO);
@@ -665,3 +548,132 @@ glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
 
     return glm::normalize(normal);
 }
+
+void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int> &indices, int MAP_WIDTH, int MAP_LENGTH, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves) {
+    int vertexIndex = 0;
+    float scale = 50.0f;
+    planeVertices.clear();
+    indices.clear();
+    SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
+
+    for (float x = 0; x <= MAP_WIDTH; x += MAP_RESOLUTION) {
+        for (float z = 0; z <= MAP_LENGTH - MAP_RESOLUTION; z += MAP_RESOLUTION) {
+
+            // will end up with each vertice having 8 floats
+            // 3 position floats, 3 normal floats, 2 texture floats
+
+            float x1, x2, x3, y1, y2, y3, z1, z2, z3;
+            glm::vec3 a, b, c;
+            glm::vec3 normal;
+            float texCoordX1 = x / TEXTURE_SIZE;
+            float texCoordZ1 = z / TEXTURE_SIZE;
+            float texCoordX2 = (x + MAP_RESOLUTION) / TEXTURE_SIZE;
+            float texCoordZ2 = (z + MAP_RESOLUTION) / TEXTURE_SIZE;
+
+            // getting vertices from triangle one
+            x1 = x;
+            z1 = z;
+            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
+            a = glm::vec3(x1, y1, z1);
+
+            x2 = x;
+            z2 = z + MAP_RESOLUTION;
+            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
+            b = glm::vec3(x2, y2, z2);
+
+            x3 = x + MAP_RESOLUTION;
+            z3 = z + MAP_RESOLUTION;
+            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
+            c = glm::vec3(x3, y3, z3);
+            normal = calculateTriangleNormal(a, b, c);
+
+            // pushing vertices from triangle one along with texture coords and normal vector
+            planeVertices.push_back(x1);
+            planeVertices.push_back(y1);
+            planeVertices.push_back(z1);
+            planeVertices.push_back(normal.x); // normalized coordinates
+            planeVertices.push_back(normal.y);
+            planeVertices.push_back(normal.z);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ1);
+
+            planeVertices.push_back(x2);
+            planeVertices.push_back(y2);
+            planeVertices.push_back(z2);
+            planeVertices.push_back(normal.x); // normalized coordinates
+            planeVertices.push_back(normal.y);
+            planeVertices.push_back(normal.z);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
+
+            planeVertices.push_back(x3);
+            planeVertices.push_back(y3);
+            planeVertices.push_back(z3);
+            planeVertices.push_back(normal.x); // normalized coordinates
+            planeVertices.push_back(normal.y);
+            planeVertices.push_back(normal.z);
+            planeVertices.push_back(texCoordX2); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
+
+            // getting vertices from triangle 2
+            x1 = x;
+            z1 = z;
+            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
+            a = glm::vec3(x1, y1, z1);
+
+            x2 = x + MAP_RESOLUTION;
+            z2 = z;
+            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
+            b = glm::vec3(x2, y2, z2);
+
+            x3 = x + MAP_RESOLUTION;
+            z3 = z + MAP_RESOLUTION;
+            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
+            c = glm::vec3(x3, y3, z3);
+            // set it to negative because the normal vector gets the vector from the opposite side of the traingle
+            // fromt the first calculation... need to fix this 
+            normal = -calculateTriangleNormal(a, b, c);
+
+            // pushing vertices from triangle 2 along with coord and normal info
+            planeVertices.push_back(x1);
+            planeVertices.push_back(y1);
+            planeVertices.push_back(z1);
+            planeVertices.push_back(normal.x); // normalized coordinates
+            planeVertices.push_back(normal.y);
+            planeVertices.push_back(normal.z);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ1);
+
+            planeVertices.push_back(x2);
+            planeVertices.push_back(y2);
+            planeVertices.push_back(z2);
+            planeVertices.push_back(normal.x); // normalized coordinates
+            planeVertices.push_back(normal.y);
+            planeVertices.push_back(normal.z);
+            planeVertices.push_back(texCoordX1); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
+
+            planeVertices.push_back(x3);
+            planeVertices.push_back(y3);
+            planeVertices.push_back(z3);
+            planeVertices.push_back(normal.x); // normalized coordinates
+            planeVertices.push_back(normal.y);
+            planeVertices.push_back(normal.z);
+            planeVertices.push_back(texCoordX2); // texture coordinates
+            planeVertices.push_back(texCoordZ2);
+
+            // fill vertices matrix
+            indices.push_back(vertexIndex + 1);
+            indices.push_back(vertexIndex + 5);
+            indices.push_back(vertexIndex + 2);
+
+            // fill vertices matrix
+            indices.push_back(vertexIndex + 2);
+            indices.push_back(vertexIndex + 1);
+            indices.push_back(vertexIndex + 5);
+
+            vertexIndex += 6;
+        }
+    }
+
+};
