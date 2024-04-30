@@ -4,13 +4,13 @@
 #include <glm/glm/gtx/transform.hpp>
 #include <glm/glm/gtc/matrix_transform.hpp>
 #include <glm/glm/gtc/type_ptr.hpp>
-#include <glm/glm/gtc/noise.hpp>
-
-#include <cstdint>
 
 #include "shader.h"
 #include "camera.h"
 #include "SimplexNoise.h"
+#include "imgui.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_glfw.h"
 
 #include <iostream>
 #include <vector>
@@ -20,8 +20,8 @@
 #include "stb_image.h"
 
 const float PLANE_SIZE = 10.0f;
-const unsigned int SCR_WIDTH = 1600;
-const unsigned int SCR_HEIGHT = 1200;
+const int SCR_WIDTH = 1600;
+const int SCR_HEIGHT = 1200;
 const float MAP_WIDTH = 500.0f;
 const float MAP_LENGTH = 500.0f;
 const float MAP_HEIGHT = 55.0f;
@@ -29,15 +29,20 @@ const float VIEW_DISTANCE = 1000.0f;
 const float MAP_RESOLUTION = 1.0f;
 const unsigned int NUM_STRIPS = (int)MAP_WIDTH * 5;
 const unsigned int NUM_VERTS_PER_STRIP = (int)MAP_LENGTH * 2;
-const unsigned int TEXTURE_SIZE = 4;
+const unsigned int TEXTURE_SIZE = 10;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
 bool firstMouse = true;
+bool mouseLook = true;
 Camera camera (glm::vec3(0.0f, 0.0f, 3.0f));
-glm::vec3 lightPosition(0.0f, 100.0f, 0.0f);
+float lightPosition_y = 100.0f, lightPosition_x = 0.0f, lightPosition_z = 0.0f;
+glm::vec3 lightPosition(lightPosition_x, lightPosition_x, lightPosition_z);
+unsigned int buttonDelay = 0;
 
+bool qPressed = false;
+bool tPressed = false;
 
 glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -58,7 +63,7 @@ int main(void)
 
     const SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
     //const int octaves = static_cast<int>(5 + std::log(scale));
-    
+
     // Initialize and configure library
     //glfwInit();
     if (!glfwInit()) {
@@ -87,6 +92,18 @@ int main(void)
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
+
+    // initialize imgui
+    IMGUI_CHECKVERSION();
+    if (!ImGui::CreateContext()) {
+        std::cout << "Failed to initialize ImGUi" << std::endl;
+        return -1;
+    }
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;   // Enable Keyboard control
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 130");
 
     // Build and compile shader from shader.h
     //Shader myShader("../ball_game/src/vertexshader.vs", "../ball_game/src/fragmentshader.fs");
@@ -295,8 +312,6 @@ int main(void)
             planeVertices.push_back(texCoordX2); // texture coordinates
             planeVertices.push_back(texCoordZ2);
 
-
-            // fill vertices matrix
             // fill vertices matrix
             indices.push_back(vertexIndex + 1);
             indices.push_back(vertexIndex + 5);
@@ -312,15 +327,10 @@ int main(void)
     }
 
     std::cout << "Map: " << MAP_WIDTH << " x " << MAP_LENGTH << std::endl;
-
     std::cout << "Created lattice of " << NUM_STRIPS << " strips with " << NUM_VERTS_PER_STRIP << " triangles each" << std::endl;
     std::cout << "Created " << NUM_STRIPS * NUM_VERTS_PER_STRIP << " triangles total" << std::endl;
-
     std::cout << "Number of triangles: " << planeVertices.size() / (sizeof(float) * 24) << std::endl;
-
     std::cout << "Vertex index: " << (vertexIndex * 2) / 3<< std::endl;
-    /*Configures some buffer objects*/
-
 
     // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
     unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO;
@@ -380,8 +390,6 @@ int main(void)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
-    
-
     // can use glgentextures to generate more than one texture at a time 
     unsigned int brick, grass;
     glGenTextures(1, &brick);
@@ -406,7 +414,6 @@ int main(void)
     }
     // Done loading texture so free data
     stbi_image_free(data);
-
 
     // ---- load grass texture
     glGenTextures(1, &grass);
@@ -437,13 +444,47 @@ int main(void)
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-
+    // just stuff for the imgui thing, move it later
+    bool show_demo_window = true;
+    bool show_another_window = false;
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
     {
         updateLastFrame();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
         processInput(window);
+
+        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+        if (show_demo_window)
+            ImGui::ShowDemoWindow(&show_demo_window);
+
+        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+        {
+            static float f = 0.0f;
+            static int counter = 0;
+
+            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+
+            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
+            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+            ImGui::Checkbox("Another Window", &show_another_window);
+
+            ImGui::SliderFloat("float", &lightPosition_y, -2000.0f, 2000.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+
+            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+                counter++;
+            ImGui::SameLine();
+            ImGui::Text("counter = %d", counter);
+
+            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+            ImGui::End();
+        }
 
         // Render here
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -506,6 +547,10 @@ int main(void)
         glBindVertexArray(lightVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
+        // this part actually renders the gui
+        ImGui::Render();
+        ImGui::EndFrame();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Swap front and back buffers & check and call events
         glfwSwapBuffers(window);
@@ -515,6 +560,8 @@ int main(void)
     glDeleteVertexArrays(2, VAOs);
     glDeleteBuffers(2, VBOs);
     glDeleteVertexArrays(1, &lightVAO);
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui::DestroyContext();
 
     glfwTerminate();
     return 0;
@@ -534,8 +581,9 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
     float yOffset = ypos - lastY;
     lastX = xpos;
     lastY = ypos;
-
-    camera.ProcessMouseMovement(xOffset, yOffset);
+    if (mouseLook) {
+        camera.ProcessMouseMovement(xOffset, yOffset);
+    }
 }
 
 void processInput(GLFWwindow* window) {
@@ -564,8 +612,9 @@ void processInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS && qPressed != true) {
         GLint polygonMode;
+        qPressed = true;
         glGetIntegerv(GL_POLYGON_MODE, &polygonMode);
         if (polygonMode == GL_LINE) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -574,7 +623,29 @@ void processInput(GLFWwindow* window) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         }
     }
+
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS && tPressed != true) {
+        tPressed = true;
+        
+        if (!mouseLook) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            mouseLook = true;
+        }
+        else {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            mouseLook = false;
+        }
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_RELEASE) {
+        qPressed = false;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_RELEASE) {
+        tPressed = false;
+    }
 }
+
 
 void updateLastFrame(void) {
     float currentFrame = glfwGetTime();
