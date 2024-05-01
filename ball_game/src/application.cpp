@@ -22,13 +22,13 @@
 const float PLANE_SIZE = 10.0f;
 const int SCR_WIDTH = 1600;
 const int SCR_HEIGHT = 1200;
-const float MAP_WIDTH = 500.0f;
-const float MAP_LENGTH = 500.0f;
-const float MAP_HEIGHT = 55.0f;
+float mapWidth = 500.0f;
+float mapLength = 500.0f;
+float mapHeight = 55.0f;
 const float VIEW_DISTANCE = 1000.0f;
 const float MAP_RESOLUTION = 1.0f;
-const unsigned int NUM_STRIPS = (int)MAP_WIDTH * 5;
-const unsigned int NUM_VERTS_PER_STRIP = (int)MAP_LENGTH * 2;
+const unsigned int NUM_STRIPS = (int)mapWidth * 5;
+const unsigned int NUM_VERTS_PER_STRIP = (int)mapLength * 2;
 const unsigned int TEXTURE_SIZE = 10;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -41,6 +41,13 @@ Camera camera (glm::vec3(0.0f, 0.0f, 3.0f));
 float lightPosition_y = 0.0f, lightPosition_x = 0.0f, lightPosition_z = 0.0f;
 glm::vec3 lightPosition(lightPosition_x, lightPosition_y, lightPosition_z);
 
+// simplex noise values
+// Lacunarity specifies the frequency multiplier between successive octaves (default to 2.0).
+// Persistence is the loss of amplitude between successive octaves (usually 1/lacunarity)
+float lacunarity = 1.99f;
+float persistance = 0.5f;
+int octaves = 5;
+
 bool qPressed = false;
 bool tPressed = false;
 
@@ -49,22 +56,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
-void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int>& indices, int MAP_WIDTH, int MAP_LENGTH, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves);
+void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int>& indices, float MAP_WIDTH, float MAP_LENGTH, float mapHeight, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves);
 
 int main(void)
 {
-    // simplex noise values
-    // Lacunarity specifies the frequency multiplier between successive octaves (default to 2.0).
-    // Persistence is the loss of amplitude between successive octaves (usually 1/lacunarity)
-    const float amplitutde = 0.5f;
-    const float scale = 50.0f;
-    float lacunarity = 1.99f;
-    float persistance = 0.5f;
-    int octaves = 5;
-
-    SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
-    //const int octaves = static_cast<int>(5 + std::log(scale));
-
     // Initialize and configure library
     //glfwInit();
     if (!glfwInit()) {
@@ -206,9 +201,9 @@ int main(void)
     std::vector<unsigned int> indices;
     int vertexIndex = 0;
 
-    generateTerrainMap(planeVertices, indices, MAP_WIDTH, MAP_LENGTH, MAP_RESOLUTION, lacunarity, persistance, octaves);
+    generateTerrainMap(planeVertices, indices, mapWidth, mapLength, mapHeight, MAP_RESOLUTION, lacunarity, persistance, octaves);
 
-    std::cout << "Map: " << MAP_WIDTH << " x " << MAP_LENGTH << std::endl;
+    std::cout << "Map: " << mapWidth << " x " << mapLength << std::endl;
     std::cout << "Created lattice of " << NUM_STRIPS << " strips with " << NUM_VERTS_PER_STRIP << " triangles each" << std::endl;
     std::cout << "Created " << NUM_STRIPS * NUM_VERTS_PER_STRIP << " triangles total" << std::endl;
     std::cout << "Number of triangles: " << planeVertices.size() / (sizeof(float) * 24) << std::endl;
@@ -330,6 +325,7 @@ int main(void)
     bool show_demo_window = false;
 
     glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+    float sliderWidth = mapWidth, sliderLength = mapLength, sliderHeight = mapHeight;
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
@@ -350,6 +346,37 @@ int main(void)
             ImGui::Begin("World Settings");                          // Create a window called "Hello, world!" and append into it.
 
             ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+
+
+            ImGui::SliderFloat("Map Width", &sliderWidth, 50.0f, 1500.0f);
+            ImGui::SliderFloat("Map Length", &sliderLength, 50.0f, 1500.0f);
+            ImGui::SliderFloat("Map Height", &sliderHeight, 0.0f, 100.0f);
+            ImGui::SliderInt("Octaves", &octaves, 1, 10);
+
+            if (ImGui::Button("Regenerate Map")) {
+                generateTerrainMap(planeVertices, indices, sliderWidth, sliderLength, sliderHeight, MAP_RESOLUTION, lacunarity, persistance, octaves);
+                // terrain mesh stuff ------------------------------------------------------------------
+                glBindVertexArray(VAOs[1]);
+                glBindBuffer(GL_ARRAY_BUFFER, VBOs[1]);
+                glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(float), &planeVertices[0], GL_STATIC_DRAW);
+
+                // position attribute
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+                glEnableVertexAttribArray(0);
+
+                // normal attribute
+                glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+                glEnableVertexAttribArray(1);
+
+                // texture attribute
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+                glEnableVertexAttribArray(2);
+
+                // ebo buffer that takes in indices
+                glGenBuffers(1, &terrainEBO);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+            }
 
             ImGui::SliderFloat("Light X", &lightPosition_x, -200.0f, 200.0f);
             ImGui::SliderFloat("Light Y", &lightPosition_y, -100.0f, 200.0f);
@@ -409,7 +436,7 @@ int main(void)
         
         // draw terrain
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3((MAP_WIDTH / 2) * -1, -10.0f, (MAP_LENGTH / 2) * -1));
+        model = glm::translate(model, glm::vec3((mapWidth / 2) * -1, -10.0f, (mapLength / 2) * -1));
         lightingShader.setMat4("model", model);
         glBindVertexArray(VAOs[1]);
         // draw terrain by strips
@@ -468,7 +495,6 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
         camera.ProcessMouseMovement(xOffset, yOffset);
     }
 }
-
 void processInput(GLFWwindow* window) {
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == true)
@@ -528,18 +554,14 @@ void processInput(GLFWwindow* window) {
         tPressed = false;
     }
 }
-
-
 void updateLastFrame(void) {
     float currentFrame = glfwGetTime();
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 }
-
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
-
 glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
     glm::vec3 edge1 = v2 - v1;
     glm::vec3 edge2 = v3 - v1;
@@ -548,8 +570,7 @@ glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
 
     return glm::normalize(normal);
 }
-
-void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int> &indices, int MAP_WIDTH, int MAP_LENGTH, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves) {
+void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int> &indices, float MAP_WIDTH, float MAP_LENGTH, float mapHeight, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves) {
     int vertexIndex = 0;
     float scale = 50.0f;
     planeVertices.clear();
@@ -573,17 +594,17 @@ void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned 
             // getting vertices from triangle one
             x1 = x;
             z1 = z;
-            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
+            y1 = simplex.fractal(octaves, x1, z1) * mapHeight;
             a = glm::vec3(x1, y1, z1);
 
             x2 = x;
             z2 = z + MAP_RESOLUTION;
-            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
+            y2 = simplex.fractal(octaves, x2, z2) * mapHeight;
             b = glm::vec3(x2, y2, z2);
 
             x3 = x + MAP_RESOLUTION;
             z3 = z + MAP_RESOLUTION;
-            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
+            y3 = simplex.fractal(octaves, x3, z3) * mapHeight;
             c = glm::vec3(x3, y3, z3);
             normal = calculateTriangleNormal(a, b, c);
 
@@ -618,17 +639,17 @@ void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned 
             // getting vertices from triangle 2
             x1 = x;
             z1 = z;
-            y1 = simplex.fractal(octaves, x1, z1) * MAP_HEIGHT;
+            y1 = simplex.fractal(octaves, x1, z1) * mapHeight;
             a = glm::vec3(x1, y1, z1);
 
             x2 = x + MAP_RESOLUTION;
             z2 = z;
-            y2 = simplex.fractal(octaves, x2, z2) * MAP_HEIGHT;
+            y2 = simplex.fractal(octaves, x2, z2) * mapHeight;
             b = glm::vec3(x2, y2, z2);
 
             x3 = x + MAP_RESOLUTION;
             z3 = z + MAP_RESOLUTION;
-            y3 = simplex.fractal(octaves, x3, z3) * MAP_HEIGHT;
+            y3 = simplex.fractal(octaves, x3, z3) * mapHeight;
             c = glm::vec3(x3, y3, z3);
             // set it to negative because the normal vector gets the vector from the opposite side of the traingle
             // fromt the first calculation... need to fix this 
