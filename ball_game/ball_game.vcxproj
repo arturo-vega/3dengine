@@ -147,6 +147,7 @@
     <ClCompile Include="src\SimplexNoise.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Header.h" />
     <ClInclude Include="src\camera.h" />
     <ClInclude Include="src\imgui.h" />
     <ClInclude Include="src\imgui_impl_opengl3.h" />

@@ -75,7 +75,6 @@ public:
 
 		if (direction == DOWN)
 			Position -= WorldUp * velocity;
-
 	}
 
 	void ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch = true)

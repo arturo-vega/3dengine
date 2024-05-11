@@ -7,6 +7,8 @@
 
 #include "shader.h"
 #include "camera.h"
+#include "terrain.h"
+
 #include "SimplexNoise.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
@@ -19,16 +21,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-const float PLANE_SIZE = 10.0f;
 const int SCR_WIDTH = 1600;
 const int SCR_HEIGHT = 1200;
-float mapWidth = 500.0f;
-float mapLength = 500.0f;
-float mapHeight = 55.0f;
+float chunkHeight = 35.0f;
 const float VIEW_DISTANCE = 1000.0f;
-const float MAP_RESOLUTION = 1.0f;
-const unsigned int NUM_STRIPS = (int)mapWidth * 5;
-const unsigned int NUM_VERTS_PER_STRIP = (int)mapLength * 2;
+const int CHUNKS_VISIBLE = 4;
+const int chunkResolution = 1;
 const unsigned int TEXTURE_SIZE = 10;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -41,22 +39,14 @@ Camera camera (glm::vec3(0.0f, 0.0f, 3.0f));
 float lightPosition_y = 0.0f, lightPosition_x = 0.0f, lightPosition_z = 0.0f;
 glm::vec3 lightPosition(lightPosition_x, lightPosition_y, lightPosition_z);
 
-// simplex noise values
-// Lacunarity specifies the frequency multiplier between successive octaves (default to 2.0).
-// Persistence is the loss of amplitude between successive octaves (usually 1/lacunarity)
-float lacunarity = 1.99f;
-float persistance = 0.5f;
-int octaves = 5;
-
 bool qPressed = false;
 bool tPressed = false;
 
-glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
-void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int>& indices, float MAP_WIDTH, float MAP_LENGTH, float mapHeight, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves);
+void terrainBufferWriter(unsigned int VAO, unsigned int VBO, unsigned int EBO, terrainChunk chunk);
 
 int main(void)
 {
@@ -151,8 +141,6 @@ int main(void)
     -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
     };
-
-
     GLfloat vertices[] = {
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f,
      0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f,
@@ -197,21 +185,18 @@ int main(void)
     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f
     };
 
-    std::vector<float> planeVertices;
-    std::vector<unsigned int> indices;
-    int vertexIndex = 0;
-
-    generateTerrainMap(planeVertices, indices, mapWidth, mapLength, mapHeight, MAP_RESOLUTION, lacunarity, persistance, octaves);
-
-    std::cout << "Map: " << mapWidth << " x " << mapLength << std::endl;
-    std::cout << "Created lattice of " << NUM_STRIPS << " strips with " << NUM_VERTS_PER_STRIP << " triangles each" << std::endl;
-    std::cout << "Created " << NUM_STRIPS * NUM_VERTS_PER_STRIP << " triangles total" << std::endl;
-    std::cout << "Number of triangles: " << planeVertices.size() / (sizeof(float) * 24) << std::endl;
-    std::cout << "Vertex index: " << (vertexIndex * 2) / 3<< std::endl;
+    // simplex noise values
+    // Lacunarity specifies the frequency multiplier between successive octaves (default to 2.0).
+    // Persistence is the loss of amplitude between successive octaves (usually 1/lacunarity)
+    float lacunarity = 1.99f;
+    float persistance = 0.5f;
+    int octaves = 5;
+    // initialize terrain, generates initial chunks
+    Terrain terrainMap(chunkHeight, chunkResolution, lacunarity, persistance, octaves, CHUNKS_VISIBLE);
 
     // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
     unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO;
-    GLuint terrainEBO;
+    unsigned int terrainEBO = 0;
 
     // cube stuff -----------------------------------------------------------------------
     glGenVertexArrays(2, VAOs);
@@ -244,28 +229,6 @@ int main(void)
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-
-    // terrain mesh stuff ------------------------------------------------------------------
-    glBindVertexArray(VAOs[1]);
-    glBindBuffer(GL_ARRAY_BUFFER, VBOs[1]);
-    glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(float), &planeVertices[0], GL_STATIC_DRAW);
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    // normal attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    // texture attribute
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    // ebo buffer that takes in indices
-    glGenBuffers(1, &terrainEBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
     // can use glgentextures to generate more than one texture at a time 
     unsigned int brick, grass;
@@ -313,7 +276,6 @@ int main(void)
     // Done loading texture so free data
     stbi_image_free(data);
  
-
     // Sets the color of the background
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
@@ -325,7 +287,6 @@ int main(void)
     bool show_demo_window = false;
 
     glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
-    float sliderWidth = mapWidth, sliderLength = mapLength, sliderHeight = mapHeight;
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
@@ -347,47 +308,13 @@ int main(void)
 
             ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
 
-
-            ImGui::SliderFloat("Map Width", &sliderWidth, 50.0f, 1500.0f);
-            ImGui::SliderFloat("Map Length", &sliderLength, 50.0f, 1500.0f);
-            ImGui::SliderFloat("Map Height", &sliderHeight, 0.0f, 100.0f);
-            ImGui::SliderInt("Octaves", &octaves, 1, 10);
-
-            if (ImGui::Button("Regenerate Map")) {
-                generateTerrainMap(planeVertices, indices, sliderWidth, sliderLength, sliderHeight, MAP_RESOLUTION, lacunarity, persistance, octaves);
-                // terrain mesh stuff ------------------------------------------------------------------
-                glBindVertexArray(VAOs[1]);
-                glBindBuffer(GL_ARRAY_BUFFER, VBOs[1]);
-                glBufferData(GL_ARRAY_BUFFER, planeVertices.size() * sizeof(float), &planeVertices[0], GL_STATIC_DRAW);
-
-                // position attribute
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-                glEnableVertexAttribArray(0);
-
-                // normal attribute
-                glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-                glEnableVertexAttribArray(1);
-
-                // texture attribute
-                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-                glEnableVertexAttribArray(2);
-
-                // ebo buffer that takes in indices
-                glGenBuffers(1, &terrainEBO);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
-            }
-
             ImGui::SliderFloat("Light X", &lightPosition_x, -200.0f, 200.0f);
             ImGui::SliderFloat("Light Y", &lightPosition_y, -100.0f, 200.0f);
             ImGui::SliderFloat("Light Z", &lightPosition_z, -200.0f, 200.0f);
             ImGui::SliderFloat("Light Rotation", &cubeRadians, -360.0f, 360.0f);
             ImGui::ColorEdit3("Light Color", (float*)&lightColor);
 
-            //if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-            //    counter++;
-            //ImGui::SameLine();
-            //ImGui::Text("counter = %d", counter);
+            ImGui::Text("Position: x = %.1f, y = %.1f, z = %.1f", camera.Position.x, camera.Position.y, camera.Position.z);
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
@@ -435,15 +362,22 @@ int main(void)
         glBindTexture(GL_TEXTURE_2D, grass);
         
         // draw terrain
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3((mapWidth / 2) * -1, -10.0f, (mapLength / 2) * -1));
-        lightingShader.setMat4("model", model);
-        glBindVertexArray(VAOs[1]);
-        // draw terrain by strips
-        for (unsigned int i = 0; i < NUM_STRIPS - 1; i++) {
-            glDrawElements(GL_TRIANGLE_STRIP, NUM_VERTS_PER_STRIP, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * NUM_VERTS_PER_STRIP * i));
+        for (auto& pair : terrainMap.chunkMap) {
+            terrainChunk& chunk = pair.second;
+            if (chunk.visible) {
+                if (!chunk.buffered) {
+                    terrainBufferWriter(VAOs[1], VBOs[1], terrainEBO, chunk);
+                    chunk.buffered = true;
+                }
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(chunk.posX, -10.0f, chunk.posZ));
+                lightingShader.setMat4("model", model);
+                glBindVertexArray(VAOs[1]);
+                for (unsigned int i = 0; i <= chunk.numStrips; i++) {
+                    glDrawElements(GL_TRIANGLE_STRIP, chunk.numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk.numVertsPerStrip * i));
+                }
+            }
         }
-        //glDrawArrays(GL_TRIANGLES, 0, (MAP_WIDTH - 1) * (MAP_LENGTH - 1) * 6);
 
         // draw light box
         lightCubeShader.use();
@@ -476,6 +410,7 @@ int main(void)
     glfwTerminate();
     return 0;
 }
+
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
 
@@ -562,139 +497,26 @@ void updateLastFrame(void) {
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
-glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
-    glm::vec3 edge1 = v2 - v1;
-    glm::vec3 edge2 = v3 - v1;
+void terrainBufferWriter(unsigned int VAO, unsigned int VBO, unsigned int EBO, terrainChunk chunk) {
+    // terrain mesh stuff ------------------------------------------------------------------
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, chunk.vertices.size() * sizeof(float), &chunk.vertices[0], GL_STATIC_DRAW);
 
-    glm::vec3 normal = glm::cross(edge1, edge2);
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
 
-    return glm::normalize(normal);
+    // normal attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // texture attribute
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    // ebo buffer that takes in indices
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, chunk.indices.size() * sizeof(unsigned int), &chunk.indices[0], GL_STATIC_DRAW);
 }
-void generateTerrainMap(std::vector<float>& planeVertices, std::vector<unsigned int> &indices, float MAP_WIDTH, float MAP_LENGTH, float mapHeight, int MAP_RESOLTUION, float lacunarity, float persistance, int octaves) {
-    int vertexIndex = 0;
-    float scale = 50.0f;
-    planeVertices.clear();
-    indices.clear();
-    SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
-
-    for (float x = 0; x <= MAP_WIDTH; x += MAP_RESOLUTION) {
-        for (float z = 0; z <= MAP_LENGTH - MAP_RESOLUTION; z += MAP_RESOLUTION) {
-
-            // will end up with each vertice having 8 floats
-            // 3 position floats, 3 normal floats, 2 texture floats
-
-            float x1, x2, x3, y1, y2, y3, z1, z2, z3;
-            glm::vec3 a, b, c;
-            glm::vec3 normal;
-            float texCoordX1 = x / TEXTURE_SIZE;
-            float texCoordZ1 = z / TEXTURE_SIZE;
-            float texCoordX2 = (x + MAP_RESOLUTION) / TEXTURE_SIZE;
-            float texCoordZ2 = (z + MAP_RESOLUTION) / TEXTURE_SIZE;
-
-            // getting vertices from triangle one
-            x1 = x;
-            z1 = z;
-            y1 = simplex.fractal(octaves, x1, z1) * mapHeight;
-            a = glm::vec3(x1, y1, z1);
-
-            x2 = x;
-            z2 = z + MAP_RESOLUTION;
-            y2 = simplex.fractal(octaves, x2, z2) * mapHeight;
-            b = glm::vec3(x2, y2, z2);
-
-            x3 = x + MAP_RESOLUTION;
-            z3 = z + MAP_RESOLUTION;
-            y3 = simplex.fractal(octaves, x3, z3) * mapHeight;
-            c = glm::vec3(x3, y3, z3);
-            normal = calculateTriangleNormal(a, b, c);
-
-            // pushing vertices from triangle one along with texture coords and normal vector
-            planeVertices.push_back(x1);
-            planeVertices.push_back(y1);
-            planeVertices.push_back(z1);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ1);
-
-            planeVertices.push_back(x2);
-            planeVertices.push_back(y2);
-            planeVertices.push_back(z2);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-
-            planeVertices.push_back(x3);
-            planeVertices.push_back(y3);
-            planeVertices.push_back(z3);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX2); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-
-            // getting vertices from triangle 2
-            x1 = x;
-            z1 = z;
-            y1 = simplex.fractal(octaves, x1, z1) * mapHeight;
-            a = glm::vec3(x1, y1, z1);
-
-            x2 = x + MAP_RESOLUTION;
-            z2 = z;
-            y2 = simplex.fractal(octaves, x2, z2) * mapHeight;
-            b = glm::vec3(x2, y2, z2);
-
-            x3 = x + MAP_RESOLUTION;
-            z3 = z + MAP_RESOLUTION;
-            y3 = simplex.fractal(octaves, x3, z3) * mapHeight;
-            c = glm::vec3(x3, y3, z3);
-            // set it to negative because the normal vector gets the vector from the opposite side of the traingle
-            // fromt the first calculation... need to fix this 
-            normal = -calculateTriangleNormal(a, b, c);
-
-            // pushing vertices from triangle 2 along with coord and normal info
-            planeVertices.push_back(x1);
-            planeVertices.push_back(y1);
-            planeVertices.push_back(z1);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ1);
-
-            planeVertices.push_back(x2);
-            planeVertices.push_back(y2);
-            planeVertices.push_back(z2);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX1); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-
-            planeVertices.push_back(x3);
-            planeVertices.push_back(y3);
-            planeVertices.push_back(z3);
-            planeVertices.push_back(normal.x); // normalized coordinates
-            planeVertices.push_back(normal.y);
-            planeVertices.push_back(normal.z);
-            planeVertices.push_back(texCoordX2); // texture coordinates
-            planeVertices.push_back(texCoordZ2);
-
-            // fill vertices matrix
-            indices.push_back(vertexIndex + 1);
-            indices.push_back(vertexIndex + 5);
-            indices.push_back(vertexIndex + 2);
-
-            // fill vertices matrix
-            indices.push_back(vertexIndex + 2);
-            indices.push_back(vertexIndex + 1);
-            indices.push_back(vertexIndex + 5);
-
-            vertexIndex += 6;
-        }
-    }
-
-};
