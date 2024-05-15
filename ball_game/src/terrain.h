@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <cmath>
 #include <map>
 #include <glad/glad.h>
 #include <glm/glm/glm.hpp>
@@ -15,6 +16,7 @@ struct terrainChunk {
     int chunkID = 0;
     std::vector<float> vertices;
     std::vector<unsigned int> indices;
+    std::pair<int, int> chunkMapCoords;
     bool generated = false;
     bool visible = true; // should be set to false later after testing
     bool buffered = false;
@@ -25,51 +27,114 @@ struct terrainChunk {
 class Terrain {
 public:
     int chunksGenerated = 0;
-    const int chunkSize = 50; // currently should be a multiple of 6
+    int chunkSize; // Multiple of 5 seems to work not sure about other multiples
+    int chunkMapSize;
     std::map<std::pair<int, int>, terrainChunk> chunkMap;
+    float chunkHeight;
+    float lacunarity; 
+    float persistance; 
+    int octaves;
+    int chunkResolution;
+    std::pair<int, int> currentChunk = { 0,0 };
+
     // constructor, generates the initial area around the player
-    Terrain(float chunkHeight, int chunkResolution, float lacunarity, float persistance, int octaves, int chunksVisible) {
+    Terrain(float chunkHeight, int chunkResolution, float lacunarity, float persistance, int octaves, int chunkMapSize, int chunkSize) {
+        this->chunkHeight = chunkHeight;
+        this->lacunarity = lacunarity;
+        this->persistance = persistance;
+        this->octaves = octaves;
+        this->chunkResolution = chunkResolution;
+        this->chunkSize = chunkSize;
+        this->chunkMapSize = chunkMapSize;
         // view distance is measured in number of chunks
-        chunksVisible = chunksVisible / 2;
-        for (int x = chunksVisible * -1; x < chunksVisible; x++) {
-            for (int z = chunksVisible * -1; z < chunksVisible; z++) {
+        /*
+        for (int x = 0 - (chunkMapSize / 2); x < currentChunk.first + (chunkMapSize / 2) + 1; x++) {
+            for (int z = 0 - (chunkMapSize / 2); z < currentChunk.second + (chunkMapSize / 2) + 1; z++) {
                 terrainChunk newChunk;
-                newChunk.posX = x * chunkSize;
-                newChunk.posZ = z * chunkSize;
+                newChunk.posX = (x * chunkSize);
+                newChunk.posZ = (z * chunkSize);
                 newChunk.size = chunkSize + 1; // I don't know why but if you don't add a 1 here the z axis will be one column short
                 newChunk.numStrips = newChunk.size * 3;
                 newChunk.numVertsPerStrip = newChunk.size * 3;
                 generateChunk(&newChunk, chunkHeight, chunkResolution, lacunarity, persistance, octaves);
-                chunkMap[{x, z}] = newChunk;
                 newChunk.generated = true;
                 newChunk.chunkID = chunksGenerated;
                 chunksGenerated += 1;
-                //printChunkInfo(newChunk);
+                chunkMap[{x, z}] = newChunk;
+                std::cout << "CHUNK MAP UPDATED: " << "X: " << x << " Z: " << z << " Chunk ID: " << newChunk.chunkID << std::endl;
+                printChunkInfo(newChunk);
             }
         }
+        */
     }
 
-    void checkForVisibleChunks(int viewDistance, float playerPosX, float playerPosz) {
-        for (int x = viewDistance * -1; x < viewDistance; x++) {
-            for (int z = viewDistance * -1; z < viewDistance; z++) {
+    std::vector<std::pair<int, int>> checkForVisibleChunks(int chunkMapSize, float playerPosX, float playerPosZ) {
+        checkCurrentChunk(&currentChunk, playerPosX, playerPosZ);
 
+        std::vector<std::pair<int,int>> visibleChunks;
+
+        // set every chunk to not be visible, probably more efficient way to do this
+
+
+        for (int x = currentChunk.first - (chunkMapSize / 2); x <= currentChunk.first + (chunkMapSize / 2); x++) {
+            for (int z = currentChunk.second - (chunkMapSize / 2); z <= currentChunk.second + (chunkMapSize / 2); z++) {
+                // Check if there is a value in the chunk map at the x, z position
+                if (!chunkMap.count({x,z})) {
+                    terrainChunk newChunk;
+                    newChunk.posX = x * chunkSize;
+                    newChunk.posZ = z * chunkSize;
+                    newChunk.size = chunkSize + 1;
+                    newChunk.numStrips = newChunk.size * 3;
+                    newChunk.numVertsPerStrip = newChunk.size * 3;
+                    generateChunk(&newChunk, chunkHeight, chunkResolution, lacunarity, persistance, octaves);
+                    newChunk.generated = true;
+                    chunkMap[{x, z}].visible = true;
+                    newChunk.chunkID = chunksGenerated;
+                    chunksGenerated += 1;
+                    newChunk.chunkMapCoords.first = x;
+                    newChunk.chunkMapCoords.second = z;
+                    chunkMap[{x, z}] = newChunk;
+                    std::cout << "CHUNK MAP UPDATED: " << "X: " << x << " Z: " << z << " Chunk ID: " << newChunk.chunkID << " Current Chunk: " << currentChunk.first << " " << currentChunk.second << std::endl;
+                    printChunkInfo(newChunk);
+                }
+                chunkMap[{x, z}].visible = true;
+                visibleChunks.push_back({x, z});
+                //std::cout << chunkMap[{x, z}].chunkID << std::endl;
+                //std::cout << "X: " << x << " Z: " << z << std::endl;
             }
+
+            //std::cout << "Adjusted X Z: " << currentChunk.first << " " << currentChunk.second << std::endl;
         }
+
+        //std::cout << visibleChunks.size() << std::endl;
+        return visibleChunks;
+
     }
 
     void printChunkInfo(terrainChunk chunk) {
         std::cout << "Chunk ID: " << chunk.chunkID << std::endl;
-        std::cout << "Chunk Origin: " << chunk.posX << ", " << chunk.posZ << std::endl;
-        std::cout << "Verticies: " << chunk.vertices.size() / sizeof(float) << " Indices: " << chunk.indices.size() / sizeof(unsigned int) << std::endl;
+        std::cout << "Chunk Coordinates: X " << chunk.posX << " Z " << chunk.posZ << std::endl;
         std::cout << "Generated: " << chunk.generated << " Visible: " << chunk.visible << std::endl;
-        std::cout << "Number Strips: " << chunk.numStrips << " Number Vertices in Strip: " << chunk.numVertsPerStrip << std::endl;
     }
 
 private:
     const unsigned int TEXTURE_SIZE = 10;
 
-    float chunkGenerated(terrainChunk chunk) {
-        return chunk.generated;
+    void checkCurrentChunk(std::pair<int, int>* currentChunk, float playerPosX, float playerPosZ) {
+        int adjustedPositionX = std::abs(playerPosX) / chunkSize; // truncates float, gives x and z values for chunkMap map
+        int adjustedPositionZ = std::abs(playerPosZ) / chunkSize;
+
+        if (playerPosX < 0) {
+            adjustedPositionX *= -1;
+        }
+        if (playerPosZ < 0) {
+            adjustedPositionZ *= -1;
+        }
+
+        if (currentChunk->first != adjustedPositionX || currentChunk->second != adjustedPositionZ) {
+            currentChunk->first = adjustedPositionX;
+            currentChunk->second = adjustedPositionZ;
+        }
     }
 
     glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
@@ -86,11 +151,13 @@ private:
         float scale = 50.0f;
         chunk->vertices.clear();
         chunk->indices.clear();
+
         SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
-        std::cout << "pos x z " << chunk->posX << " / " << chunk->posZ << std::endl;
-        std::cout << "Y from pos x and z:  " << simplex.fractal(octaves, chunk->posX, chunk->posZ) * mapHeight << std::endl;
+        //std::cout << "pos x z " << chunk->posX << " / " << chunk->posZ << std::endl;
+        //std::cout << "Y from pos x and z:  " << simplex.fractal(octaves, chunk->posX, chunk->posZ) * mapHeight << std::endl;
         for (float x = chunk->posX; x < chunk->size + chunk->posX - 1; x += chunkResolution) { // subtrack one from comparison because we +1 to chunk size to fix z axis
             for (float z = chunk->posZ; z < chunk->size + chunk->posZ; z += chunkResolution) {
+                //std::cout << "X: " << x << " Z: " << z << std::endl;
                 // will end up with each vertice having 8 floats
                 // 3 position floats, 3 normal floats, 2 texture floats
                 float x1, x2, x3, y1, y2, y3, z1, z2, z3;
@@ -207,5 +274,7 @@ private:
 
             }
         }
+
+        chunk->generated = true;
     }
 };

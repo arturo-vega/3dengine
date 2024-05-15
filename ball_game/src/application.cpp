@@ -25,9 +25,10 @@ const int SCR_WIDTH = 1600;
 const int SCR_HEIGHT = 1200;
 float chunkHeight = 35.0f;
 const float VIEW_DISTANCE = 1000.0f;
-const int CHUNKS_VISIBLE = 4;
+const int CHUNK_MAP_SIZE = 5; // keep this number odd... Or change the nested for loops for checking visible chunks
 const int chunkResolution = 1;
 const unsigned int TEXTURE_SIZE = 10;
+const int CHUNK_SIZE = 50;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float lastX = SCR_WIDTH / 2;
@@ -35,7 +36,7 @@ float lastY = SCR_HEIGHT / 2;
 float cubeRadians = 0.0f;
 bool firstMouse = true;
 bool mouseLook = true;
-Camera camera (glm::vec3(0.0f, 0.0f, 3.0f));
+Camera camera (glm::vec3(25.0f, 0.0f, 25.0f));
 float lightPosition_y = 0.0f, lightPosition_x = 0.0f, lightPosition_z = 0.0f;
 glm::vec3 lightPosition(lightPosition_x, lightPosition_y, lightPosition_z);
 
@@ -47,6 +48,7 @@ void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void terrainBufferWriter(unsigned int VAO, unsigned int VBO, unsigned int EBO, terrainChunk chunk);
+void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO);
 
 int main(void)
 {
@@ -192,11 +194,11 @@ int main(void)
     float persistance = 0.5f;
     int octaves = 5;
     // initialize terrain, generates initial chunks
-    Terrain terrainMap(chunkHeight, chunkResolution, lacunarity, persistance, octaves, CHUNKS_VISIBLE);
+    Terrain terrainMap(chunkHeight, chunkResolution, lacunarity, persistance, octaves, CHUNK_MAP_SIZE, CHUNK_SIZE);
 
     // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
     unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO;
-    unsigned int terrainEBO = 0;
+    unsigned int terrainEBO = 0;    
 
     // cube stuff -----------------------------------------------------------------------
     glGenVertexArrays(2, VAOs);
@@ -287,6 +289,8 @@ int main(void)
     bool show_demo_window = false;
 
     glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+    std::pair<int, int> lastChunk = terrainMap.currentChunk;
+    bool generatedFirstChunk = false;
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
@@ -294,7 +298,7 @@ int main(void)
         updateLastFrame();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        ImGui::NewFrame(); 
 
         processInput(window);
 
@@ -315,6 +319,7 @@ int main(void)
             ImGui::ColorEdit3("Light Color", (float*)&lightColor);
 
             ImGui::Text("Position: x = %.1f, y = %.1f, z = %.1f", camera.Position.x, camera.Position.y, camera.Position.z);
+            ImGui::Text("Chunk Map Position: x = %i, z = %i", terrainMap.currentChunk.first, terrainMap.currentChunk.second);
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
@@ -360,22 +365,35 @@ int main(void)
         // bind grass for terrain
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, grass);
-        
+
+
+        // Vector of x, z pairs to be used to get chunks to be drawn
+        std::vector<std::pair<int, int>> chunksToDraw;
+        chunksToDraw = terrainMap.checkForVisibleChunks(CHUNK_MAP_SIZE, camera.Position.x, camera.Position.z);
+
+        //std::cout << "SIZE OF VECTOR: " << chunksToDraw.size() << std::endl;
+
         // draw terrain
-        for (auto& pair : terrainMap.chunkMap) {
-            terrainChunk& chunk = pair.second;
-            if (chunk.visible) {
-                if (!chunk.buffered) {
-                    terrainBufferWriter(VAOs[1], VBOs[1], terrainEBO, chunk);
-                    chunk.buffered = true;
-                }
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3(chunk.posX, -10.0f, chunk.posZ));
-                lightingShader.setMat4("model", model);
-                glBindVertexArray(VAOs[1]);
-                for (unsigned int i = 0; i <= chunk.numStrips; i++) {
-                    glDrawElements(GL_TRIANGLE_STRIP, chunk.numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk.numVertsPerStrip * i));
-                }
+        for (int i = 0; i < chunksToDraw.size(); i++) {
+            terrainChunk *chunk = &terrainMap.chunkMap[chunksToDraw[i]];
+
+            if (!generatedFirstChunk) {
+                terrainBufferWriter(VAOs[1], VBOs[1], terrainEBO, *chunk);
+                generatedFirstChunk = true;
+            }
+            
+            model = glm::mat4(1.0f);
+            // I subtrack the chunk x and z coordinates multiplied by the chunk size so that the map does not advance faster than the movemen tof the camera
+            // Subtracking by multiples of two of the chunk size puts the camera in the center of the center chunk
+            model = glm::translate(model, glm::vec3(chunk->posX + (CHUNK_SIZE * 2), -10.0f, chunk->posZ + (CHUNK_SIZE * 2)));
+
+            //model = glm::translate(model, glm::vec3((chunk->posX - (CHUNK_SIZE * 2)) - (terrainMap.currentChunk.first * CHUNK_SIZE), -10.0f,(chunk->posZ - (CHUNK_SIZE * 2)) - (terrainMap.currentChunk.second * CHUNK_SIZE)));
+
+            lightingShader.setMat4("model", model);
+            glBindVertexArray(VAOs[1]);
+
+            for (unsigned int i = 0; i <= chunk->numStrips; i++) {
+                glDrawElements(GL_TRIANGLE_STRIP, chunk->numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk->numVertsPerStrip * i));
             }
         }
 
@@ -519,4 +537,13 @@ void terrainBufferWriter(unsigned int VAO, unsigned int VBO, unsigned int EBO, t
     glGenBuffers(1, &EBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, chunk.indices.size() * sizeof(unsigned int), &chunk.indices[0], GL_STATIC_DRAW);
+}
+
+void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO) {
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 0, nullptr, GL_STATIC_DRAW);
 }
