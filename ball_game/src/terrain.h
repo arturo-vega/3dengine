@@ -83,7 +83,7 @@ public:
                     terrainChunk newChunk;
                     newChunk.posX = x * chunkSize;
                     newChunk.posZ = z * chunkSize;
-                    newChunk.size = chunkSize + 1;
+                    newChunk.size = chunkSize + 1; // I don't know why but if you don't add a 1 here the z axis will be one column short
                     newChunk.numStrips = newChunk.size * 3;
                     newChunk.numVertsPerStrip = newChunk.size * 3;
                     generateChunk(&newChunk, chunkHeight, chunkResolution, lacunarity, persistance, octaves);
@@ -94,8 +94,8 @@ public:
                     newChunk.chunkMapCoords.first = x;
                     newChunk.chunkMapCoords.second = z;
                     chunkMap[{x, z}] = newChunk;
-                    std::cout << "CHUNK MAP UPDATED: " << "X: " << x << " Z: " << z << " Chunk ID: " << newChunk.chunkID << " Current Chunk: " << currentChunk.first << " " << currentChunk.second << std::endl;
-                    printChunkInfo(newChunk);
+                    //std::cout << "CHUNK MAP UPDATED: " << "X: " << x << " Z: " << z << " Chunk ID: " << newChunk.chunkID << " Current Chunk: " << currentChunk.first << " " << currentChunk.second << std::endl;
+                    //printChunkInfo(newChunk);
                 }
                 chunkMap[{x, z}].visible = true;
                 visibleChunks.push_back({x, z});

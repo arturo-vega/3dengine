@@ -8,6 +8,7 @@
 #include "shader.h"
 #include "camera.h"
 #include "terrain.h"
+#include "player.h"
 
 #include "SimplexNoise.h"
 #include "imgui.h"
@@ -17,6 +18,7 @@
 #include <iostream>
 #include <vector>
 #include <random>
+#include <algorithm>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -25,7 +27,7 @@ const int SCR_WIDTH = 1600;
 const int SCR_HEIGHT = 1200;
 float chunkHeight = 35.0f;
 const float VIEW_DISTANCE = 1000.0f;
-const int CHUNK_MAP_SIZE = 5; // keep this number odd... Or change the nested for loops for checking visible chunks
+const int CHUNK_MAP_SIZE = 20; // keep this number odd... Or change the nested for loops for checking visible chunks
 const int chunkResolution = 1;
 const unsigned int TEXTURE_SIZE = 10;
 const int CHUNK_SIZE = 50;
@@ -47,7 +49,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
-void terrainBufferWriter(unsigned int VAO, unsigned int VBO, unsigned int EBO, terrainChunk chunk);
+void terrainBufferWriter(std::vector<GLuint> *terrainVAOs, std::vector<GLuint> *terrainVBOs, std::vector<GLuint> *terrainEBOs, terrainChunk *chunk);
 void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO);
 
 int main(void)
@@ -193,12 +195,17 @@ int main(void)
     float lacunarity = 1.99f;
     float persistance = 0.5f;
     int octaves = 5;
-    // initialize terrain, generates initial chunks
+    // initialize terrain
     Terrain terrainMap(chunkHeight, chunkResolution, lacunarity, persistance, octaves, CHUNK_MAP_SIZE, CHUNK_SIZE);
 
     // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
     unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO;
-    unsigned int terrainEBO = 0;    
+    
+    // creating buffers for every chunk
+
+    std::vector<GLuint> terrainVAOs;
+    std::vector<GLuint> terrainVBOs;
+    std::vector<GLuint> terrainEBOs;
 
     // cube stuff -----------------------------------------------------------------------
     glGenVertexArrays(2, VAOs);
@@ -290,7 +297,11 @@ int main(void)
 
     glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
     std::pair<int, int> lastChunk = terrainMap.currentChunk;
+    std::vector<std::pair<int, int>> lastChunkList;
     bool generatedFirstChunk = false;
+
+
+
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
@@ -371,31 +382,53 @@ int main(void)
         std::vector<std::pair<int, int>> chunksToDraw;
         chunksToDraw = terrainMap.checkForVisibleChunks(CHUNK_MAP_SIZE, camera.Position.x, camera.Position.z);
 
+
+
         //std::cout << "SIZE OF VECTOR: " << chunksToDraw.size() << std::endl;
 
         // draw terrain
         for (int i = 0; i < chunksToDraw.size(); i++) {
-            terrainChunk *chunk = &terrainMap.chunkMap[chunksToDraw[i]];
-
             if (!generatedFirstChunk) {
-                terrainBufferWriter(VAOs[1], VBOs[1], terrainEBO, *chunk);
-                generatedFirstChunk = true;
-            }
-            
-            model = glm::mat4(1.0f);
-            // I subtrack the chunk x and z coordinates multiplied by the chunk size so that the map does not advance faster than the movemen tof the camera
-            // Subtracking by multiples of two of the chunk size puts the camera in the center of the center chunk
-            model = glm::translate(model, glm::vec3(chunk->posX + (CHUNK_SIZE * 2), -10.0f, chunk->posZ + (CHUNK_SIZE * 2)));
+                terrainChunk* chunk = &terrainMap.chunkMap[chunksToDraw[i]];
+                terrainBufferWriter(&terrainVAOs, &terrainVBOs, &terrainEBOs, chunk);
 
-            //model = glm::translate(model, glm::vec3((chunk->posX - (CHUNK_SIZE * 2)) - (terrainMap.currentChunk.first * CHUNK_SIZE), -10.0f,(chunk->posZ - (CHUNK_SIZE * 2)) - (terrainMap.currentChunk.second * CHUNK_SIZE)));
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
+                lightingShader.setMat4("model", model);
+                glBindVertexArray(terrainVAOs[i]);
+                glBindBuffer(GL_ARRAY_BUFFER, terrainVBOs[i]);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBOs[i]);
 
-            lightingShader.setMat4("model", model);
-            glBindVertexArray(VAOs[1]);
+                for (unsigned int strip = 0; strip <= chunk->numStrips; strip++) {
+                    glDrawElements(GL_TRIANGLE_STRIP, chunk->numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk->numVertsPerStrip * strip));
+                }
+            } 
+            else {
+                terrainChunk* chunk = &terrainMap.chunkMap[chunksToDraw[i]];
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, glm::vec3(0.0f, 0.0f ,0.0f));
+                lightingShader.setMat4("model", model);
 
-            for (unsigned int i = 0; i <= chunk->numStrips; i++) {
-                glDrawElements(GL_TRIANGLE_STRIP, chunk->numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk->numVertsPerStrip * i));
+                glBindVertexArray(terrainVAOs[i]);
+
+                // changes the buffers only if its a new chunk, currently rewrites every chunk, should change this so it only does it for new chunks FIX IT
+                if (lastChunk.first != terrainMap.currentChunk.first || lastChunk.second != terrainMap.currentChunk.second) {
+                    if (std::find(lastChunkList.begin(), lastChunkList.end(), chunk->chunkMapCoords) == lastChunkList.end()) {
+                        glBindBuffer(GL_ARRAY_BUFFER, terrainVBOs[i]);
+                        glBufferData(GL_ARRAY_BUFFER, chunk->vertices.size() * sizeof(float), &chunk->vertices[0], GL_STATIC_DRAW);
+
+                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBOs[i]);
+                        glBufferData(GL_ELEMENT_ARRAY_BUFFER, chunk->indices.size() * sizeof(unsigned int), &chunk->indices[0], GL_STATIC_DRAW);
+                        //std::cout << "Drawing terrain chunk: " << chunk->chunkID << std::endl;
+                    }
+                }
+
+                for (unsigned int strip = 0; strip <= chunk->numStrips; strip++) {
+                    glDrawElements(GL_TRIANGLE_STRIP, chunk->numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk->numVertsPerStrip * strip));
+                }
             }
         }
+        generatedFirstChunk = true;
 
         // draw light box
         lightCubeShader.use();
@@ -414,6 +447,8 @@ int main(void)
         ImGui::EndFrame();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+        lastChunk = terrainMap.currentChunk;
+
         // Swap front and back buffers & check and call events
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -422,8 +457,8 @@ int main(void)
     glDeleteVertexArrays(2, VAOs);
     glDeleteBuffers(2, VBOs);
     glDeleteVertexArrays(1, &lightVAO);
-    ImGui_ImplOpenGL3_Shutdown();
     ImGui::DestroyContext();
+    ImGui_ImplOpenGL3_Shutdown();
 
     glfwTerminate();
     return 0;
@@ -515,12 +550,25 @@ void updateLastFrame(void) {
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
-void terrainBufferWriter(unsigned int VAO, unsigned int VBO, unsigned int EBO, terrainChunk chunk) {
+void terrainBufferWriter(std::vector<GLuint> *terrainVAOs, std::vector<GLuint> *terrainVBOs, std::vector<GLuint> *terrainEBOs, terrainChunk *chunk) {
     // terrain mesh stuff ------------------------------------------------------------------
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, chunk.vertices.size() * sizeof(float), &chunk.vertices[0], GL_STATIC_DRAW);
+    GLuint VAO, VBO, EBO;
 
+    // Generate and bind the VAO
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+
+    // Generate and bind the VBO
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, chunk->vertices.size() * sizeof(float), &chunk->vertices[0], GL_STATIC_DRAW);
+
+    // Generate and bind the EBO
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, chunk->indices.size() * sizeof(unsigned int), &chunk->indices[0], GL_STATIC_DRAW);
+
+    // Set up the vertex attributes
     // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -533,10 +581,10 @@ void terrainBufferWriter(unsigned int VAO, unsigned int VBO, unsigned int EBO, t
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
-    // ebo buffer that takes in indices
-    glGenBuffers(1, &EBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, chunk.indices.size() * sizeof(unsigned int), &chunk.indices[0], GL_STATIC_DRAW);
+    // Store the VAO, VBO, and EBO for later use
+    terrainVAOs->push_back(VAO);
+    terrainVBOs->push_back(VBO);
+    terrainEBOs->push_back(EBO);
 }
 
 void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO) {
