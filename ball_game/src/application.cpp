@@ -23,9 +23,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-const int SCR_WIDTH = 1600;
-const int SCR_HEIGHT = 1200;
-float chunkHeight = 55.0f;
+const int SCR_WIDTH = 800;
+const int SCR_HEIGHT = 600;
+float chunkHeight = 50.0f;
 const float VIEW_DISTANCE = 1000.0f;
 const int CHUNK_MAP_SIZE = 20; // keep this number odd... Or change the nested for loops for checking visible chunks
 const int chunkResolution = 1;
@@ -101,6 +101,7 @@ int main(void)
     // light shaders
     Shader lightingShader("../ball_game/src/colors.vs", "../ball_game/src/colors.fs");
     Shader lightCubeShader("../ball_game/src/light_cube.vs", "../ball_game/src/light_cube.fs");
+    Shader chunkMapShader("../ball_game/src/chunkmap.vert", "../ball_game/src/chunkmap.frag");
 
     GLfloat verticesLightCube[] = {
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
@@ -383,7 +384,16 @@ int main(void)
         std::vector<std::pair<int, int>> chunksToDraw;
         chunksToDraw = terrainMap.checkForVisibleChunks(CHUNK_MAP_SIZE, camera.Position.x, camera.Position.z, camera.Front);
 
-        //std::cout << "SIZE OF VECTOR: " << chunksToDraw.size() << std::endl;
+        //std::cout << "X: " << camera.Front.x << "Y: " << camera.Front.y << "Z: " << camera.Front.z << std::endl;
+        
+        chunkMapShader.use();
+        chunkMapShader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
+        chunkMapShader.setVec3("lightColor", lightColor);
+        chunkMapShader.setVec3("lightPosition", lightPosition);
+        chunkMapShader.setVec3("viewPosition", lightPosition);
+        chunkMapShader.setMat4("projection", projection);
+        chunkMapShader.setMat4("view", view);
+        chunkMapShader.setFloat("mapHeight", chunkHeight);
 
         // draw terrain
         for (int i = 0; i < chunksToDraw.size(); i++) {
@@ -393,7 +403,7 @@ int main(void)
 
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-                lightingShader.setMat4("model", model);
+                chunkMapShader.setMat4("model", model);
                 glBindVertexArray(terrainVAOs[i]);
                 glBindBuffer(GL_ARRAY_BUFFER, terrainVBOs[i]);
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBOs[i]);

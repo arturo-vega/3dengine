@@ -51,12 +51,12 @@ public:
     std::vector<std::pair<int, int>> checkForVisibleChunks(int chunkMapSize, float playerPosX, float playerPosZ, glm::vec3 front) {
         checkCurrentChunk(&currentChunk, playerPosX, playerPosZ);
 
-        std::vector<std::pair<int,int>> visibleChunks;        
+        std::vector<std::pair<int, int>> visibleChunks;
 
         for (int x = currentChunk.first - (chunkMapSize / 2); x <= currentChunk.first + (chunkMapSize / 2); x++) {
             for (int z = currentChunk.second - (chunkMapSize / 2); z <= currentChunk.second + (chunkMapSize / 2); z++) {
                 // Check if there is a value in the chunk map at the x, z position
-                if (!chunkMap.count({x,z})) {
+                if (!chunkMap.count({ x, z })) {
                     terrainChunk newChunk;
                     newChunk.posX = x * chunkSize;
                     newChunk.posZ = z * chunkSize;
@@ -65,18 +65,18 @@ public:
                     newChunk.numVertsPerStrip = newChunk.size * 3;
                     generateChunk(&newChunk, chunkHeight, chunkResolution, lacunarity, persistance, octaves);
                     newChunk.generated = true;
-                    chunkMap[{x, z}].visible = false;
                     newChunk.chunkID = chunksGenerated;
                     chunksGenerated += 1;
                     newChunk.chunkMapCoords.first = x;
                     newChunk.chunkMapCoords.second = z;
                     chunkMap[{x, z}] = newChunk;
                 }
+
                 // Calculate the direction from the camera to the chunk
                 glm::vec3 chunkDir = glm::vec3(x * chunkSize, 0, z * chunkSize) - glm::vec3(playerPosX, 0, playerPosZ);
 
                 // Check if the chunk is in front of the camera
-                if (glm::dot(front, chunkDir) > -0.1f) {
+                if (glm::dot(front, chunkDir) > -0.0f) {
                     // Chunk is visible, add it to the list
                     chunkMap[{x, z}].visible = true;
                     visibleChunks.push_back({ x, z });
@@ -87,8 +87,8 @@ public:
                 }
             }
         }
-        return visibleChunks;
 
+        return visibleChunks;
     }
 
     void printChunkInfo(terrainChunk chunk) {
