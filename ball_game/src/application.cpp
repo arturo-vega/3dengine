@@ -51,6 +51,7 @@ void updateLastFrame(void);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void terrainBufferWriter(std::vector<GLuint> *terrainVAOs, std::vector<GLuint> *terrainVBOs, std::vector<GLuint> *terrainEBOs, terrainChunk *chunk);
+void waterPlaneBufferWriter(std::vector<GLuint>* waterVAOs, std::vector<GLuint>* waterVBOs, GLfloat* waterPlaneVerticies);
 void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO);
 unsigned int loadCubemap(std::vector<std::string> faces);
 
@@ -255,12 +256,16 @@ int main(void)
     Terrain terrainMap(chunkHeight, chunkResolution, lacunarity, persistance, octaves, CHUNK_MAP_SIZE, CHUNK_SIZE);
 
     // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
-    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO, skyboxVAO, skyboxVBO, waterPlaneVAO, waterPlaneVBO;
+    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO, skyboxVAO, skyboxVBO;
     
     // creating buffers for every chunk
     std::vector<GLuint> terrainVAOs;
     std::vector<GLuint> terrainVBOs;
     std::vector<GLuint> terrainEBOs;
+
+    // creating buffers for every water plane
+    std::vector<GLuint> waterVAOs;
+    std::vector<GLuint> waterVBOs;
 
     // skybox buffer
     glGenVertexArrays(1, &skyboxVAO);
@@ -270,21 +275,6 @@ int main(void)
     glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-
-    // water plane buffer ----------------------------------------------------------------
-    glGenVertexArrays(1, &waterPlaneVAO);
-    glGenBuffers(1, &waterPlaneVBO);
-    glBindVertexArray(waterPlaneVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, waterPlaneVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(waterPlaneVertices), waterPlaneVertices, GL_STATIC_DRAW);
-
-    // verticies
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-
-    // normals
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
 
     // cube stuff -----------------------------------------------------------------------
     glGenVertexArrays(2, VAOs);
@@ -490,6 +480,7 @@ int main(void)
             if (!generatedFirstChunk) {
                 terrainChunk* chunk = &terrainMap.chunkMap[chunksToDraw[i]];
                 terrainBufferWriter(&terrainVAOs, &terrainVBOs, &terrainEBOs, chunk);
+                waterPlaneBufferWriter(&waterVAOs, &waterVBOs, waterPlaneVertices);
 
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
@@ -510,12 +501,13 @@ int main(void)
                     waterShader.setVec3("viewPosition", lightPosition);
                     waterShader.setMat4("projection", projection);
                     waterShader.setMat4("view", view);
-                    
-					glBindVertexArray(waterPlaneVAO);
-					glBindBuffer(GL_ARRAY_BUFFER, waterPlaneVBO);
-					model = glm::mat4(1.0f);
-					model = glm::translate(model, glm::vec3(chunk->posX, 0.0f, chunk->posZ));
+
+                    model = glm::mat4(1.0f);
+                    model = glm::translate(model, glm::vec3(chunk->posX, 0.0f, chunk->posZ));
                     waterShader.setMat4("model", model);
+                    
+					glBindVertexArray(waterVAOs[i]);
+					glBindBuffer(GL_ARRAY_BUFFER, waterVBOs[i]);
 					glDrawArrays(GL_TRIANGLES, 0, 6);
 				}
             } 
@@ -552,11 +544,12 @@ int main(void)
                     waterShader.setMat4("projection", projection);
                     waterShader.setMat4("view", view);
 
-                    glBindVertexArray(waterPlaneVAO);
-                    glBindBuffer(GL_ARRAY_BUFFER, waterPlaneVBO);
                     model = glm::mat4(1.0f);
                     model = glm::translate(model, glm::vec3(chunk->posX, 0.0f, chunk->posZ));
                     waterShader.setMat4("model", model);
+
+                    glBindVertexArray(waterVAOs[i]);
+                    glBindBuffer(GL_ARRAY_BUFFER, waterVBOs[i]);
                     glDrawArrays(GL_TRIANGLES, 0, 6);
                 }
             }
@@ -697,8 +690,27 @@ void updateLastFrame(void) {
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
+void waterPlaneBufferWriter(std::vector<GLuint> *waterVAOs, std::vector<GLuint> *waterVBOs, GLfloat *waterPlaneVerticies) {
+    GLuint VAO, VBO;
+
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, 36 * sizeof(float), waterPlaneVerticies, GL_STATIC_DRAW); // 36 verticies * 6 floats 
+
+    // verticies
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+
+    // normals
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+
+    waterVAOs->push_back(VAO);
+    waterVBOs->push_back(VBO);
+}
 void terrainBufferWriter(std::vector<GLuint> *terrainVAOs, std::vector<GLuint> *terrainVBOs, std::vector<GLuint> *terrainEBOs, terrainChunk *chunk) {
-    // terrain mesh stuff ------------------------------------------------------------------
     GLuint VAO, VBO, EBO;
 
     // Generate and bind the VAO
@@ -764,7 +776,6 @@ unsigned int loadCubemap(std::vector<std::string> faces)
 
     return textureID;
 }
-
 void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO) {
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
