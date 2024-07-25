@@ -25,7 +25,8 @@
 
 const int SCR_WIDTH = 800;
 const int SCR_HEIGHT = 600;
-float chunkHeight = 75.0f;
+const float chunkHeight = 75.0f;
+const float waterLevel = (chunkHeight * 0.4f) - chunkHeight; // If chunkmap.frag's water level is changed from 0.2f adjust this value
 const float VIEW_DISTANCE = 1000.0f;
 const int CHUNK_MAP_SIZE = 20;
 const int chunkResolution = 1;
@@ -97,11 +98,12 @@ int main(void)
     ImGui_ImplOpenGL3_Init("#version 130");
 
 
-    // light shaders
+    // shaders
     Shader lightingShader("../ball_game/src/colors.vs", "../ball_game/src/colors.fs");
     Shader lightCubeShader("../ball_game/src/light_cube.vs", "../ball_game/src/light_cube.fs");
     Shader chunkMapShader("../ball_game/src/chunkmap.vert", "../ball_game/src/chunkmap.frag");
     Shader skyBoxShader("../ball_game/src/skybox.vert", "../ball_game/src/skybox.frag");
+    Shader waterShader("../ball_game/src/water.vert", "../ball_game/src/water.frag");
 
     GLfloat verticesLightCube[] = {
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
@@ -189,6 +191,14 @@ int main(void)
     -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f,
     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f
     };
+    GLfloat waterPlaneVertices[] = {
+        -CHUNK_SIZE / 2.0f, waterLevel, -CHUNK_SIZE / 2.0f, 0.0f, 1.0f, 0.0f,
+        -CHUNK_SIZE / 2.0f, waterLevel,  CHUNK_SIZE / 2.0f, 0.0f, 1.0f, 0.0f,
+         CHUNK_SIZE / 2.0f, waterLevel,  CHUNK_SIZE / 2.0f, 0.0f, 1.0f, 0.0f,
+         CHUNK_SIZE / 2.0f, waterLevel,  CHUNK_SIZE / 2.0f, 0.0f, 1.0f, 0.0f,
+         CHUNK_SIZE / 2.0f, waterLevel, -CHUNK_SIZE / 2.0f, 0.0f, 1.0f, 0.0f,
+        -CHUNK_SIZE / 2.0f, waterLevel, -CHUNK_SIZE / 2.0f, 0.0f, 1.0f, 0.0f
+    };
     float skyboxVertices[] = {
         // positions          
         -1.0f,  1.0f, -1.0f,
@@ -233,6 +243,7 @@ int main(void)
         -1.0f, -1.0f,  1.0f,
          1.0f, -1.0f,  1.0f
     };
+    
 
     // simplex noise values
     // Lacunarity specifies the frequency multiplier between successive octaves (default to 2.0).
@@ -244,10 +255,9 @@ int main(void)
     Terrain terrainMap(chunkHeight, chunkResolution, lacunarity, persistance, octaves, CHUNK_MAP_SIZE, CHUNK_SIZE);
 
     // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
-    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO, skyboxVAO, skyboxVBO;
+    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO, skyboxVAO, skyboxVBO, waterPlaneVAO, waterPlaneVBO;
     
     // creating buffers for every chunk
-
     std::vector<GLuint> terrainVAOs;
     std::vector<GLuint> terrainVBOs;
     std::vector<GLuint> terrainEBOs;
@@ -260,6 +270,21 @@ int main(void)
     glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+    // water plane buffer ----------------------------------------------------------------
+    glGenVertexArrays(1, &waterPlaneVAO);
+    glGenBuffers(1, &waterPlaneVBO);
+    glBindVertexArray(waterPlaneVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, waterPlaneVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(waterPlaneVertices), waterPlaneVertices, GL_STATIC_DRAW);
+
+    // verticies
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+
+    // normals
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
 
     // cube stuff -----------------------------------------------------------------------
     glGenVertexArrays(2, VAOs);
@@ -458,7 +483,7 @@ int main(void)
         chunkMapShader.setVec3("viewPosition", lightPosition);
         chunkMapShader.setMat4("projection", projection);
         chunkMapShader.setMat4("view", view);
-        chunkMapShader.setFloat("mapHeight", chunkHeight);
+        chunkMapShader.setFloat("mapHeight", chunkHeight); // Passes in the height of the chunkmap to the shader for colors
 
         // draw terrain
         for (int i = 0; i < chunksToDraw.size(); i++) {
@@ -476,8 +501,26 @@ int main(void)
                 for (unsigned int strip = 0; strip <= chunk->numStrips; strip++) {
                     glDrawElements(GL_TRIANGLE_STRIP, chunk->numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk->numVertsPerStrip * strip));
                 }
+
+                if (chunk->hasWater) {
+                    waterShader.use();
+                    waterShader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
+                    waterShader.setVec3("lightColor", lightColor);
+                    waterShader.setVec3("lightPosition", lightPosition);
+                    waterShader.setVec3("viewPosition", lightPosition);
+                    waterShader.setMat4("projection", projection);
+                    waterShader.setMat4("view", view);
+                    
+					glBindVertexArray(waterPlaneVAO);
+					glBindBuffer(GL_ARRAY_BUFFER, waterPlaneVBO);
+					model = glm::mat4(1.0f);
+					model = glm::translate(model, glm::vec3(chunk->posX, 0.0f, chunk->posZ));
+                    waterShader.setMat4("model", model);
+					glDrawArrays(GL_TRIANGLES, 0, 6);
+				}
             } 
             else {
+                chunkMapShader.use();
                 terrainChunk* chunk = &terrainMap.chunkMap[chunksToDraw[i]];
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, glm::vec3(0.0f, 0.0f ,0.0f));
@@ -499,6 +542,22 @@ int main(void)
 
                 for (unsigned int strip = 0; strip <= chunk->numStrips; strip++) {
                     glDrawElements(GL_TRIANGLE_STRIP, chunk->numVertsPerStrip, GL_UNSIGNED_INT, (void*)(sizeof(unsigned int) * chunk->numVertsPerStrip * strip));
+                }
+                if (chunk->hasWater) {
+                    waterShader.use();
+                    waterShader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
+                    waterShader.setVec3("lightColor", lightColor);
+                    waterShader.setVec3("lightPosition", lightPosition);
+                    waterShader.setVec3("viewPosition", lightPosition);
+                    waterShader.setMat4("projection", projection);
+                    waterShader.setMat4("view", view);
+
+                    glBindVertexArray(waterPlaneVAO);
+                    glBindBuffer(GL_ARRAY_BUFFER, waterPlaneVBO);
+                    model = glm::mat4(1.0f);
+                    model = glm::translate(model, glm::vec3(chunk->posX, 0.0f, chunk->posZ));
+                    waterShader.setMat4("model", model);
+                    glDrawArrays(GL_TRIANGLES, 0, 6);
                 }
             }
         }

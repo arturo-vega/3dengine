@@ -20,6 +20,7 @@ struct terrainChunk {
     bool generated = false;
     bool visible = false;
     bool buffered = false;
+    bool hasWater = false;
     unsigned int numStrips = 0;
     unsigned int numVertsPerStrip = 0;
 };
@@ -106,6 +107,7 @@ public:
 
 private:
     const unsigned int TEXTURE_SIZE = 10;
+    const float waterLevel = (chunkHeight * 0.4f) - chunkHeight; // If chunkmap.frag's water level is changed from 0.2f adjust this value
 
     void checkCurrentChunk(std::pair<int, int>* currentChunk, float playerPosX, float playerPosZ) {
         int adjustedPositionX = std::abs(playerPosX) / chunkSize; // truncates float, gives x and z values for chunkMap map
@@ -187,9 +189,42 @@ private:
                 chunk->indices.push_back(vertexIndex + 5);
 
                 vertexIndex += 6;
+
+                if (y1 < waterLevel || y2 < waterLevel || y3 < waterLevel || y4 < waterLevel) {
+					chunk->hasWater = true;
+				}
             }
         }
-
         chunk->generated = true;
+    }
+
+    void generateWaterPlane(terrainChunk* chunk, float mapHeight) {
+        std::vector<float> waterVertices;
+        
+        // If I want the water to be textured remember to add texture coordinatess
+        //float texCoordX1 = x / TEXTURE_SIZE, texCoordZ1 = z / TEXTURE_SIZE;
+        //float texCoordX2 = (x + chunkResolution) / TEXTURE_SIZE, texCoordZ2 = (z + chunkResolution) / TEXTURE_SIZE;
+
+        float x1 = chunk->posX, z1 = chunk->posZ; // Bottom left
+        float x2 = chunk->posX, z2 = chunk->posZ + chunk->size; // Top left
+        float x3 = chunk->posX + chunk->size, z3 = chunk->posZ + chunk->size; // Top right
+        float x4 = chunk->posX + chunk->size, z4 = chunk->posZ; // Bottom right
+
+        auto pushVertex = [&](float x, float y, float z) {
+			waterVertices.push_back(x);
+			waterVertices.push_back(y);
+			waterVertices.push_back(z);
+		};
+
+        // Triangle 1
+        pushVertex(x1, waterLevel, z1);
+        pushVertex(x2, waterLevel, z2);
+        pushVertex(x3, waterLevel, z3);
+
+        // Triangle 2
+        pushVertex(x1, waterLevel, z1);
+        pushVertex(x3, waterLevel, z3);
+        pushVertex(x4, waterLevel, z4);
+
     }
 };
