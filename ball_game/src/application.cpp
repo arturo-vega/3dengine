@@ -25,7 +25,7 @@
 
 const int SCR_WIDTH = 800;
 const int SCR_HEIGHT = 600;
-float chunkHeight = 50.0f;
+float chunkHeight = 75.0f;
 const float VIEW_DISTANCE = 1000.0f;
 const int CHUNK_MAP_SIZE = 20;
 const int chunkResolution = 1;
@@ -51,6 +51,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void terrainBufferWriter(std::vector<GLuint> *terrainVAOs, std::vector<GLuint> *terrainVBOs, std::vector<GLuint> *terrainEBOs, terrainChunk *chunk);
 void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO);
+unsigned int loadCubemap(std::vector<std::string> faces);
 
 int main(void)
 {
@@ -95,13 +96,12 @@ int main(void)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
 
-    // Build and compile shader from shader.h
-    //Shader myShader("../ball_game/src/vertexshader.vs", "../ball_game/src/fragmentshader.fs");
 
     // light shaders
     Shader lightingShader("../ball_game/src/colors.vs", "../ball_game/src/colors.fs");
     Shader lightCubeShader("../ball_game/src/light_cube.vs", "../ball_game/src/light_cube.fs");
     Shader chunkMapShader("../ball_game/src/chunkmap.vert", "../ball_game/src/chunkmap.frag");
+    Shader skyBoxShader("../ball_game/src/skybox.vert", "../ball_game/src/skybox.frag");
 
     GLfloat verticesLightCube[] = {
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
@@ -189,24 +189,77 @@ int main(void)
     -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f,
     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f
     };
+    float skyboxVertices[] = {
+        // positions          
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
 
     // simplex noise values
     // Lacunarity specifies the frequency multiplier between successive octaves (default to 2.0).
     // Persistence is the loss of amplitude between successive octaves (usually 1/lacunarity)
-    float lacunarity = 1.99f;
-    float persistance = 0.5f;
-    int octaves = 5;
+    float lacunarity = 2.0f; // 2.0f
+    float persistance = 0.3f; // 0.5f
+    int octaves = 7; // 5
     // initialize terrain
     Terrain terrainMap(chunkHeight, chunkResolution, lacunarity, persistance, octaves, CHUNK_MAP_SIZE, CHUNK_SIZE);
 
     // vao[1] and vbo[2] for plane mesh/terrain ... should probably give it a unique named variable
-    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO;
+    unsigned int VAOs[2], VBOs[2], lightVAO, lightVBO, skyboxVAO, skyboxVBO;
     
     // creating buffers for every chunk
 
     std::vector<GLuint> terrainVAOs;
     std::vector<GLuint> terrainVBOs;
     std::vector<GLuint> terrainEBOs;
+
+    // skybox buffer
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
     // cube stuff -----------------------------------------------------------------------
     glGenVertexArrays(2, VAOs);
@@ -285,6 +338,22 @@ int main(void)
     }
     // Done loading texture so free data
     stbi_image_free(data);
+
+    // Load skybox into memory buffer
+    std::vector<std::string> faces
+	{
+		"../ball_game/src/skybox/right.jpg",
+		"../ball_game/src/skybox/left.jpg",
+		"../ball_game/src/skybox/top.jpg",
+		"../ball_game/src/skybox/bottom.jpg",
+		"../ball_game/src/skybox/front.jpg",
+		"../ball_game/src/skybox/back.jpg"
+	};
+    unsigned int cubemapTexture = loadCubemap(faces);
+
+    skyBoxShader.use();
+    skyBoxShader.setInt("skybox", 0);
+
  
     // Sets the color of the background
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -300,9 +369,6 @@ int main(void)
     std::pair<int, int> lastChunk = terrainMap.currentChunk;
     std::vector<std::pair<int, int>> lastChunkList;
     bool generatedFirstChunk = false;
-
-
-
 
     /* -------Loop until the user closes the window------------ */
     while (!glfwWindowShouldClose(window))
@@ -339,6 +405,7 @@ int main(void)
         }
 
         lightPosition = glm::vec3(lightPosition_x, lightPosition_y, lightPosition_z);
+
 
         // Render here
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -383,8 +450,6 @@ int main(void)
         // Vector of x, z pairs to be used to get chunks to be drawn
         std::vector<std::pair<int, int>> chunksToDraw;
         chunksToDraw = terrainMap.checkForVisibleChunks(CHUNK_MAP_SIZE, camera.Position.x, camera.Position.z, camera.Front);
-
-        //std::cout << "X: " << camera.Front.x << "Y: " << camera.Front.y << "Z: " << camera.Front.z << std::endl;
         
         chunkMapShader.use();
         chunkMapShader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
@@ -439,10 +504,6 @@ int main(void)
         }
         generatedFirstChunk = true;
 
-        //std::cout << "camera front x" << camera.Front.x << std::endl;
-        //std::cout << "camera front y" << camera.Front.y << std::endl;
-        //std::cout << "camera front z" << camera.Front.z << std::endl;
-
         // draw light box
         lightCubeShader.use();
         lightCubeShader.setMat4("projection", projection);
@@ -454,6 +515,20 @@ int main(void)
         lightCubeShader.setMat4("model", model);
         glBindVertexArray(lightVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // draw skybox as last
+        glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
+        skyBoxShader.use();
+        view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // remove translation from the view matrix
+        skyBoxShader.setMat4("view", view);
+        skyBoxShader.setMat4("projection", projection);
+        // skybox cube
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS); // set depth function back to default
 
         // this part actually renders the gui
         ImGui::Render();
@@ -598,6 +673,37 @@ void terrainBufferWriter(std::vector<GLuint> *terrainVAOs, std::vector<GLuint> *
     terrainVAOs->push_back(VAO);
     terrainVBOs->push_back(VBO);
     terrainEBOs->push_back(EBO);
+}
+unsigned int loadCubemap(std::vector<std::string> faces)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++)
+    {
+        unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data)
+        {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data
+            );
+            stbi_image_free(data);
+        }
+        else
+        {
+            std::cout << "Cubemap tex failed to load at path: " << faces[i] << std::endl;
+            stbi_image_free(data);
+        }
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
 }
 
 void clearBuffer(unsigned int VAO, unsigned int VBO, unsigned int EBO) {

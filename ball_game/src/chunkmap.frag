@@ -43,7 +43,7 @@ void main()
     vec3 color;
     if (normalizedHeight < 0.2) {
         color = vec3(0.0, 0.0, 1.0); // Blue for lowest heights
-    } else if (normalizedHeight < 0.4) {
+    } else if (normalizedHeight < 0.25) {
         color = vec3(1.0, 1.0, 0.0); // Yellow for medium heights
     } else if (normalizedHeight < 0.6) {
         color = vec3(0.0, 1.0, 0.0); // Green for low heights

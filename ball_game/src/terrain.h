@@ -89,6 +89,8 @@ public:
                 }
                 else {
                     chunk.visible = false;
+                    // Problems with not rendering unseen chunks so having them rendered for now
+                    visibleChunks.push_back(chunkCoords);
                 }
             }
         }
