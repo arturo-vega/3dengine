@@ -25,7 +25,7 @@
 
 const int SCR_WIDTH = 1600;
 const int SCR_HEIGHT = 1200;
-float chunkHeight = 35.0f;
+float chunkHeight = 55.0f;
 const float VIEW_DISTANCE = 1000.0f;
 const int CHUNK_MAP_SIZE = 20; // keep this number odd... Or change the nested for loops for checking visible chunks
 const int chunkResolution = 1;
@@ -330,6 +330,7 @@ int main(void)
             ImGui::ColorEdit3("Light Color", (float*)&lightColor);
 
             ImGui::Text("Position: x = %.1f, y = %.1f, z = %.1f", camera.Position.x, camera.Position.y, camera.Position.z);
+            ImGui::Text("Front: x = %.1f, y = %.1f, z = %.1f", camera.Front.x, camera.Front.y, camera.Front.z);
             ImGui::Text("Chunk Map Position: x = %i, z = %i", terrainMap.currentChunk.first, terrainMap.currentChunk.second);
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
@@ -380,7 +381,7 @@ int main(void)
 
         // Vector of x, z pairs to be used to get chunks to be drawn
         std::vector<std::pair<int, int>> chunksToDraw;
-        chunksToDraw = terrainMap.checkForVisibleChunks(CHUNK_MAP_SIZE, camera.Position.x, camera.Position.z);
+        chunksToDraw = terrainMap.checkForVisibleChunks(CHUNK_MAP_SIZE, camera.Position.x, camera.Position.z, camera.Front);
 
 
 
@@ -429,6 +430,10 @@ int main(void)
             }
         }
         generatedFirstChunk = true;
+
+        //std::cout << "camera front x" << camera.Front.x << std::endl;
+        //std::cout << "camera front y" << camera.Front.y << std::endl;
+        //std::cout << "camera front z" << camera.Front.z << std::endl;
 
         // draw light box
         lightCubeShader.use();

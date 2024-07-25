@@ -68,13 +68,10 @@ public:
         */
     }
 
-    std::vector<std::pair<int, int>> checkForVisibleChunks(int chunkMapSize, float playerPosX, float playerPosZ) {
+    std::vector<std::pair<int, int>> checkForVisibleChunks(int chunkMapSize, float playerPosX, float playerPosZ, glm::vec3 front) {
         checkCurrentChunk(&currentChunk, playerPosX, playerPosZ);
 
-        std::vector<std::pair<int,int>> visibleChunks;
-
-        // set every chunk to not be visible, probably more efficient way to do this
-
+        std::vector<std::pair<int,int>> visibleChunks;        
 
         for (int x = currentChunk.first - (chunkMapSize / 2); x <= currentChunk.first + (chunkMapSize / 2); x++) {
             for (int z = currentChunk.second - (chunkMapSize / 2); z <= currentChunk.second + (chunkMapSize / 2); z++) {
@@ -88,7 +85,7 @@ public:
                     newChunk.numVertsPerStrip = newChunk.size * 3;
                     generateChunk(&newChunk, chunkHeight, chunkResolution, lacunarity, persistance, octaves);
                     newChunk.generated = true;
-                    chunkMap[{x, z}].visible = true;
+                    chunkMap[{x, z}].visible = false;
                     newChunk.chunkID = chunksGenerated;
                     chunksGenerated += 1;
                     newChunk.chunkMapCoords.first = x;
@@ -97,8 +94,21 @@ public:
                     //std::cout << "CHUNK MAP UPDATED: " << "X: " << x << " Z: " << z << " Chunk ID: " << newChunk.chunkID << " Current Chunk: " << currentChunk.first << " " << currentChunk.second << std::endl;
                     //printChunkInfo(newChunk);
                 }
-                chunkMap[{x, z}].visible = true;
-                visibleChunks.push_back({x, z});
+                // Calculate the direction from the camera to the chunk
+                glm::vec3 chunkDir = glm::vec3(x * chunkSize, 0, z * chunkSize) - glm::vec3(playerPosX, 0, playerPosZ);
+
+                // Check if the chunk is in front of the camera
+                if (glm::dot(front, chunkDir) > -0.1f) {
+                    // Chunk is visible, add it to the list
+                    chunkMap[{x, z}].visible = true;
+                    visibleChunks.push_back({ x, z });
+                }
+                else {
+                    // Chunk is not visible, set it to not be visible
+                    chunkMap[{x, z}].visible = false;
+                }
+                //chunkMap[{x, z}].visible = true;
+                //visibleChunks.push_back({x, z});
                 //std::cout << chunkMap[{x, z}].chunkID << std::endl;
                 //std::cout << "X: " << x << " Z: " << z << std::endl;
             }
