@@ -46,26 +46,6 @@ public:
         this->chunkResolution = chunkResolution;
         this->chunkSize = chunkSize;
         this->chunkMapSize = chunkMapSize;
-        // view distance is measured in number of chunks
-        /*
-        for (int x = 0 - (chunkMapSize / 2); x < currentChunk.first + (chunkMapSize / 2) + 1; x++) {
-            for (int z = 0 - (chunkMapSize / 2); z < currentChunk.second + (chunkMapSize / 2) + 1; z++) {
-                terrainChunk newChunk;
-                newChunk.posX = (x * chunkSize);
-                newChunk.posZ = (z * chunkSize);
-                newChunk.size = chunkSize + 1; // I don't know why but if you don't add a 1 here the z axis will be one column short
-                newChunk.numStrips = newChunk.size * 3;
-                newChunk.numVertsPerStrip = newChunk.size * 3;
-                generateChunk(&newChunk, chunkHeight, chunkResolution, lacunarity, persistance, octaves);
-                newChunk.generated = true;
-                newChunk.chunkID = chunksGenerated;
-                chunksGenerated += 1;
-                chunkMap[{x, z}] = newChunk;
-                std::cout << "CHUNK MAP UPDATED: " << "X: " << x << " Z: " << z << " Chunk ID: " << newChunk.chunkID << std::endl;
-                printChunkInfo(newChunk);
-            }
-        }
-        */
     }
 
     std::vector<std::pair<int, int>> checkForVisibleChunks(int chunkMapSize, float playerPosX, float playerPosZ, glm::vec3 front) {
@@ -91,8 +71,6 @@ public:
                     newChunk.chunkMapCoords.first = x;
                     newChunk.chunkMapCoords.second = z;
                     chunkMap[{x, z}] = newChunk;
-                    //std::cout << "CHUNK MAP UPDATED: " << "X: " << x << " Z: " << z << " Chunk ID: " << newChunk.chunkID << " Current Chunk: " << currentChunk.first << " " << currentChunk.second << std::endl;
-                    //printChunkInfo(newChunk);
                 }
                 // Calculate the direction from the camera to the chunk
                 glm::vec3 chunkDir = glm::vec3(x * chunkSize, 0, z * chunkSize) - glm::vec3(playerPosX, 0, playerPosZ);
@@ -107,16 +85,8 @@ public:
                     // Chunk is not visible, set it to not be visible
                     chunkMap[{x, z}].visible = false;
                 }
-                //chunkMap[{x, z}].visible = true;
-                //visibleChunks.push_back({x, z});
-                //std::cout << chunkMap[{x, z}].chunkID << std::endl;
-                //std::cout << "X: " << x << " Z: " << z << std::endl;
             }
-
-            //std::cout << "Adjusted X Z: " << currentChunk.first << " " << currentChunk.second << std::endl;
         }
-
-        //std::cout << visibleChunks.size() << std::endl;
         return visibleChunks;
 
     }
@@ -163,11 +133,8 @@ private:
         chunk->indices.clear();
 
         SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
-        //std::cout << "pos x z " << chunk->posX << " / " << chunk->posZ << std::endl;
-        //std::cout << "Y from pos x and z:  " << simplex.fractal(octaves, chunk->posX, chunk->posZ) * mapHeight << std::endl;
         for (float x = chunk->posX; x < chunk->size + chunk->posX - 1; x += chunkResolution) { // subtrack one from comparison because we +1 to chunk size to fix z axis
             for (float z = chunk->posZ; z < chunk->size + chunk->posZ; z += chunkResolution) {
-                //std::cout << "X: " << x << " Z: " << z << std::endl;
                 // will end up with each vertice having 8 floats
                 // 3 position floats, 3 normal floats, 2 texture floats
                 float x1, x2, x3, y1, y2, y3, z1, z2, z3;

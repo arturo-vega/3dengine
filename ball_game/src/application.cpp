@@ -383,8 +383,6 @@ int main(void)
         std::vector<std::pair<int, int>> chunksToDraw;
         chunksToDraw = terrainMap.checkForVisibleChunks(CHUNK_MAP_SIZE, camera.Position.x, camera.Position.z, camera.Front);
 
-
-
         //std::cout << "SIZE OF VECTOR: " << chunksToDraw.size() << std::endl;
 
         // draw terrain
