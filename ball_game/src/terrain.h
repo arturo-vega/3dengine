@@ -18,7 +18,7 @@ struct terrainChunk {
     std::vector<unsigned int> indices;
     std::pair<int, int> chunkMapCoords;
     bool generated = false;
-    bool visible = true; // should be set to false later after testing
+    bool visible = false;
     bool buffered = false;
     unsigned int numStrips = 0;
     unsigned int numVertsPerStrip = 0;
@@ -48,42 +48,47 @@ public:
         this->chunkMapSize = chunkMapSize;
     }
 
-    std::vector<std::pair<int, int>> checkForVisibleChunks(int chunkMapSize, float playerPosX, float playerPosZ, glm::vec3 front) {
+    std::vector<std::pair<int, int>> checkForVisibleChunks(int chunkMapSize, float playerPosX, float playerPosZ, const glm::vec3& front) {
         checkCurrentChunk(&currentChunk, playerPosX, playerPosZ);
 
         std::vector<std::pair<int, int>> visibleChunks;
+        visibleChunks.reserve(chunkMapSize * chunkMapSize); // Reserve space to avoid multiple allocations
 
-        for (int x = currentChunk.first - (chunkMapSize / 2); x <= currentChunk.first + (chunkMapSize / 2); x++) {
-            for (int z = currentChunk.second - (chunkMapSize / 2); z <= currentChunk.second + (chunkMapSize / 2); z++) {
-                // Check if there is a value in the chunk map at the x, z position
-                if (!chunkMap.count({ x, z })) {
+        int halfMapSize = chunkMapSize / 2;
+        int startX = currentChunk.first - halfMapSize;
+        int endX = currentChunk.first + halfMapSize;
+        int startZ = currentChunk.second - halfMapSize;
+        int endZ = currentChunk.second + halfMapSize;
+
+        for (int x = startX; x <= endX; ++x) {
+            for (int z = startZ; z <= endZ; ++z) {
+                auto chunkCoords = std::make_pair(x, z);
+                auto it = chunkMap.find(chunkCoords);
+
+                if (it == chunkMap.end()) {
                     terrainChunk newChunk;
                     newChunk.posX = x * chunkSize;
                     newChunk.posZ = z * chunkSize;
-                    newChunk.size = chunkSize + 1; // I don't know why but if you don't add a 1 here the z axis will be one column short
+                    newChunk.size = chunkSize + 1;
                     newChunk.numStrips = newChunk.size * 3;
                     newChunk.numVertsPerStrip = newChunk.size * 3;
                     generateChunk(&newChunk, chunkHeight, chunkResolution, lacunarity, persistance, octaves);
                     newChunk.generated = true;
-                    newChunk.chunkID = chunksGenerated;
-                    chunksGenerated += 1;
-                    newChunk.chunkMapCoords.first = x;
-                    newChunk.chunkMapCoords.second = z;
-                    chunkMap[{x, z}] = newChunk;
+                    newChunk.chunkID = chunksGenerated++;
+                    newChunk.chunkMapCoords = chunkCoords;
+                    chunkMap[chunkCoords] = newChunk;
+                    it = chunkMap.find(chunkCoords);
                 }
 
-                // Calculate the direction from the camera to the chunk
-                glm::vec3 chunkDir = glm::vec3(x * chunkSize, 0, z * chunkSize) - glm::vec3(playerPosX, 0, playerPosZ);
+                terrainChunk& chunk = it->second;
+                glm::vec3 chunkDir = glm::vec3(chunk.posX, 0, chunk.posZ) - glm::vec3(playerPosX, 0, playerPosZ);
 
-                // Check if the chunk is in front of the camera
-                if (glm::dot(front, chunkDir) > -0.0f) {
-                    // Chunk is visible, add it to the list
-                    chunkMap[{x, z}].visible = true;
-                    visibleChunks.push_back({ x, z });
+                if (glm::dot(front, chunkDir) > 0.0f) {
+                    chunk.visible = true;
+                    visibleChunks.push_back(chunkCoords);
                 }
                 else {
-                    // Chunk is not visible, set it to not be visible
-                    chunkMap[{x, z}].visible = false;
+                    chunk.visible = false;
                 }
             }
         }
@@ -126,129 +131,60 @@ private:
         return glm::normalize(normal);
     }
 
-    void generateChunk(terrainChunk *chunk, float mapHeight, int chunkResolution, float lacunarity, float persistance, int octaves) {
+    void generateChunk(terrainChunk* chunk, float mapHeight, int chunkResolution, float lacunarity, float persistance, int octaves) {
         int vertexIndex = 0;
         float scale = 50.0f;
         chunk->vertices.clear();
         chunk->indices.clear();
 
         SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
-        for (float x = chunk->posX; x < chunk->size + chunk->posX - 1; x += chunkResolution) { // subtrack one from comparison because we +1 to chunk size to fix z axis
+        chunk->vertices.reserve((chunk->size - 1) * (chunk->size - 1) * 6 * 8); // Reserve space for vertices
+        chunk->indices.reserve((chunk->size - 1) * (chunk->size - 1) * 6); // Reserve space for indices
+
+        for (float x = chunk->posX; x < chunk->size + chunk->posX - 1; x += chunkResolution) {
             for (float z = chunk->posZ; z < chunk->size + chunk->posZ; z += chunkResolution) {
-                // will end up with each vertice having 8 floats
-                // 3 position floats, 3 normal floats, 2 texture floats
-                float x1, x2, x3, y1, y2, y3, z1, z2, z3;
-                glm::vec3 a, b, c;
-                glm::vec3 normal;
-                float texCoordX1 = x / TEXTURE_SIZE;
-                float texCoordZ1 = z / TEXTURE_SIZE;
-                float texCoordX2 = (x + chunkResolution) / TEXTURE_SIZE;
-                float texCoordZ2 = (z + chunkResolution) / TEXTURE_SIZE;
+                float x1 = x, z1 = z, y1 = simplex.fractal(octaves, x1, z1) * mapHeight;
+                float x2 = x, z2 = z + chunkResolution, y2 = simplex.fractal(octaves, x2, z2) * mapHeight;
+                float x3 = x + chunkResolution, z3 = z + chunkResolution, y3 = simplex.fractal(octaves, x3, z3) * mapHeight;
+                float x4 = x + chunkResolution, z4 = z, y4 = simplex.fractal(octaves, x4, z4) * mapHeight;
 
-                // getting vertices from triangle one
-                x1 = x;
-                z1 = z;
-                y1 = simplex.fractal(octaves, x1, z1) * mapHeight;
-                a = glm::vec3(x1, y1, z1);
+                glm::vec3 a(x1, y1, z1), b(x2, y2, z2), c(x3, y3, z3), d(x4, y4, z4);
+                glm::vec3 normal1 = calculateTriangleNormal(a, b, c);
+                glm::vec3 normal2 = calculateTriangleNormal(a, c, d);
 
-                x2 = x;
-                z2 = z + chunkResolution;
-                y2 = simplex.fractal(octaves, x2, z2) * mapHeight;
-                b = glm::vec3(x2, y2, z2);
+                float texCoordX1 = x / TEXTURE_SIZE, texCoordZ1 = z / TEXTURE_SIZE;
+                float texCoordX2 = (x + chunkResolution) / TEXTURE_SIZE, texCoordZ2 = (z + chunkResolution) / TEXTURE_SIZE;
 
-                x3 = x + chunkResolution;
-                z3 = z + chunkResolution;
-                y3 = simplex.fractal(octaves, x3, z3) * mapHeight;
-                c = glm::vec3(x3, y3, z3);
-                normal = calculateTriangleNormal(a, b, c);
+                auto pushVertex = [&](float x, float y, float z, const glm::vec3& normal, float texX, float texZ) {
+                    chunk->vertices.push_back(x);
+                    chunk->vertices.push_back(y);
+                    chunk->vertices.push_back(z);
+                    chunk->vertices.push_back(normal.x);
+                    chunk->vertices.push_back(normal.y);
+                    chunk->vertices.push_back(normal.z);
+                    chunk->vertices.push_back(texX);
+                    chunk->vertices.push_back(texZ);
+                    };
 
-                // pushing vertices from triangle one along with texture coords and normal vector
-                chunk->vertices.push_back(x1);
-                chunk->vertices.push_back(y1);
-                chunk->vertices.push_back(z1);
-                chunk->vertices.push_back(normal.x); // normalized coordinates
-                chunk->vertices.push_back(normal.y);
-                chunk->vertices.push_back(normal.z);
-                chunk->vertices.push_back(texCoordX1); // texture coordinates
-                chunk->vertices.push_back(texCoordZ1);
+                // Triangle 1
+                pushVertex(x1, y1, z1, normal1, texCoordX1, texCoordZ1);
+                pushVertex(x2, y2, z2, normal1, texCoordX1, texCoordZ2);
+                pushVertex(x3, y3, z3, normal1, texCoordX2, texCoordZ2);
 
-                chunk->vertices.push_back(x2);
-                chunk->vertices.push_back(y2);
-                chunk->vertices.push_back(z2);
-                chunk->vertices.push_back(normal.x); // normalized coordinates
-                chunk->vertices.push_back(normal.y);
-                chunk->vertices.push_back(normal.z);
-                chunk->vertices.push_back(texCoordX1); // texture coordinates
-                chunk->vertices.push_back(texCoordZ2);
+                // Triangle 2
+                pushVertex(x1, y1, z1, normal2, texCoordX1, texCoordZ1);
+                pushVertex(x3, y3, z3, normal2, texCoordX2, texCoordZ2);
+                pushVertex(x4, y4, z4, normal2, texCoordX2, texCoordZ1);
 
-                chunk->vertices.push_back(x3);
-                chunk->vertices.push_back(y3);
-                chunk->vertices.push_back(z3);
-                chunk->vertices.push_back(normal.x); // normalized coordinates
-                chunk->vertices.push_back(normal.y);
-                chunk->vertices.push_back(normal.z);
-                chunk->vertices.push_back(texCoordX2); // texture coordinates
-                chunk->vertices.push_back(texCoordZ2);
-
-                // getting vertices from triangle 2
-                x1 = x;
-                z1 = z;
-                y1 = simplex.fractal(octaves, x1, z1) * mapHeight;
-                a = glm::vec3(x1, y1, z1);
-
-                x2 = x + chunkResolution;
-                z2 = z;
-                y2 = simplex.fractal(octaves, x2, z2) * mapHeight;
-                b = glm::vec3(x2, y2, z2);
-
-                x3 = x + chunkResolution;
-                z3 = z + chunkResolution;
-                y3 = simplex.fractal(octaves, x3, z3) * mapHeight;
-                c = glm::vec3(x3, y3, z3);
-                // set it to negative because the normal vector gets the vector from the opposite side of the traingle
-                // fromt the first calculation... need to fix this 
-                normal = -calculateTriangleNormal(a, b, c);
-
-                // pushing vertices from triangle 2 along with coord and normal info
-                chunk->vertices.push_back(x1);
-                chunk->vertices.push_back(y1);
-                chunk->vertices.push_back(z1);
-                chunk->vertices.push_back(normal.x); // normalized coordinates
-                chunk->vertices.push_back(normal.y);
-                chunk->vertices.push_back(normal.z);
-                chunk->vertices.push_back(texCoordX1); // texture coordinates
-                chunk->vertices.push_back(texCoordZ1);
-
-                chunk->vertices.push_back(x2);
-                chunk->vertices.push_back(y2);
-                chunk->vertices.push_back(z2);
-                chunk->vertices.push_back(normal.x); // normalized coordinates
-                chunk->vertices.push_back(normal.y);
-                chunk->vertices.push_back(normal.z);
-                chunk->vertices.push_back(texCoordX1); // texture coordinates
-                chunk->vertices.push_back(texCoordZ2);
-
-                chunk->vertices.push_back(x3);
-                chunk->vertices.push_back(y3);
-                chunk->vertices.push_back(z3);
-                chunk->vertices.push_back(normal.x); // normalized coordinates
-                chunk->vertices.push_back(normal.y);
-                chunk->vertices.push_back(normal.z);
-                chunk->vertices.push_back(texCoordX2); // texture coordinates
-                chunk->vertices.push_back(texCoordZ2);
-
-                // fill vertices matrix
+                // Indices
+                chunk->indices.push_back(vertexIndex);
                 chunk->indices.push_back(vertexIndex + 1);
-                chunk->indices.push_back(vertexIndex + 5);
                 chunk->indices.push_back(vertexIndex + 2);
-
-                // fill vertices matrix
-                chunk->indices.push_back(vertexIndex + 2);
-                chunk->indices.push_back(vertexIndex + 1);
+                chunk->indices.push_back(vertexIndex + 3);
+                chunk->indices.push_back(vertexIndex + 4);
                 chunk->indices.push_back(vertexIndex + 5);
 
                 vertexIndex += 6;
-
             }
         }
 
