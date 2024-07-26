@@ -119,7 +119,6 @@ private:
         if (playerPosZ < 0) {
             adjustedPositionZ *= -1;
         }
-
         if (currentChunk->first != adjustedPositionX || currentChunk->second != adjustedPositionZ) {
             currentChunk->first = adjustedPositionX;
             currentChunk->second = adjustedPositionZ;
@@ -129,7 +128,6 @@ private:
     glm::vec3 calculateTriangleNormal(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3) {
         glm::vec3 edge1 = v2 - v1;
         glm::vec3 edge2 = v3 - v1;
-
         glm::vec3 normal = glm::cross(edge1, edge2);
 
         return glm::normalize(normal);
@@ -140,7 +138,6 @@ private:
         float scale = 50.0f;
         chunk->vertices.clear();
         chunk->indices.clear();
-
         SimplexNoise simplex(0.1f / scale, 0.5f, lacunarity, persistance);
         chunk->vertices.reserve((chunk->size - 1) * (chunk->size - 1) * 6 * 8); // Reserve space for vertices
         chunk->indices.reserve((chunk->size - 1) * (chunk->size - 1) * 6); // Reserve space for indices

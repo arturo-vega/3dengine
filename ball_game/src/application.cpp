@@ -9,6 +9,7 @@
 #include "camera.h"
 #include "terrain.h"
 #include "player.h"
+#include "waterframebuffers.h"
 
 #include "SimplexNoise.h"
 #include "imgui.h"
@@ -105,7 +106,8 @@ int main(void)
     Shader chunkMapShader("../ball_game/src/chunkmap.vert", "../ball_game/src/chunkmap.frag");
     Shader skyBoxShader("../ball_game/src/skybox.vert", "../ball_game/src/skybox.frag");
     Shader waterShader("../ball_game/src/water.vert", "../ball_game/src/water.frag");
-
+    
+    // Cube vertices that don't have a texture on it
     GLfloat verticesLightCube[] = {
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
      0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
@@ -149,6 +151,7 @@ int main(void)
     -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
     };
+    // Cube vertices that has a texture on it and normals
     GLfloat vertices[] = {
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f,
      0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f,
@@ -244,6 +247,17 @@ int main(void)
         -1.0f, -1.0f,  1.0f,
          1.0f, -1.0f,  1.0f
     };
+    // vertex attributes for a quad that fills the entire screen in Normalized Device Coordinates.
+    float quadVertices[] = { 
+        // positions   // texCoords
+        -1.0f,  1.0f,  0.0f, 1.0f,
+        -1.0f, -1.0f,  0.0f, 0.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+
+        -1.0f,  1.0f,  0.0f, 1.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+         1.0f,  1.0f,  1.0f, 1.0f
+    };
     
 
     // simplex noise values
@@ -266,6 +280,8 @@ int main(void)
     // creating buffers for every water plane
     std::vector<GLuint> waterVAOs;
     std::vector<GLuint> waterVBOs;
+
+
 
     // skybox buffer
     glGenVertexArrays(1, &skyboxVAO);
@@ -394,6 +410,7 @@ int main(void)
         ImGui::NewFrame(); 
 
         processInput(window);
+        
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)
